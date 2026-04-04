@@ -2,7 +2,15 @@ import { daysUntil } from "../utils/dateUtil";
 import type { SavedVehicle } from "./vehicles";
 import { loadVehicles, updateLastRemindedAt } from "./vehicles";
 
-export function getDueReminderDays(expiryIso?: string | null, rules?: Unknown[]) {
+type ReminderRule = {
+  daysBefore: number;
+  enabled: boolean;
+};
+
+export function getDueReminderDays(
+  expiryIso?: string | null,
+  rules?: ReminderRule[],
+) {
   const d = daysUntil(expiryIso);
   if (d === null) return [];
   const enabledRules = (rules ?? []).filter((r) => r.enabled);
@@ -76,7 +84,7 @@ export type DueReminder = {
   policyType?: string;
 };
 
-export function getDueReminders(now = new Date()): DueReminder[] {
+export function getDueReminders(): DueReminder[] {
   const vehicles = loadVehicles();
   const due: DueReminder[] = [];
 

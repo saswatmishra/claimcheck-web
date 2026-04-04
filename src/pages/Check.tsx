@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import UploadCard from "../components/UploadCard";
 import { saveLastResult } from "../services/storage";
 import type { AnalysisResult } from "../types/analysis";
-import { loadVehicles, removeVehicle } from "../services/vehicles";
 import SavedVehicles from "../components/SavedVehicles";
 import { APP_CONFIG } from "../config";
 
@@ -124,8 +123,6 @@ function analyzeDemo(scenario: DemoScenario): AnalysisResult {
 }
 
 export default function Check() {
-  const saved = loadVehicles();
-
   const navigate = useNavigate();
 
   const [demoMode, setDemoMode] = useState(false);
