@@ -16,7 +16,24 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { toLower, startCase } from "lodash-es";
 
 const app = express();
-app.use(cors({ origin: "http://localhost:5173" }));
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://claimcheck.co.in",
+  "https://www.claimcheck.co.in",
+];
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Not allowed by CORS"));
+    },
+  }),
+);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -100,7 +117,7 @@ app.post(
 
         const expiryDate = new Date(`${expiryIso}T00:00:00`);
         const diffDays = Math.ceil(
-          (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+          (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
         );
         if (diffDays < 0) {
           renewalRisk = "RED";
@@ -340,7 +357,7 @@ app.post(
           {
             label: "DL Valid Upto",
             value: dlExpiryDate ?? "Not checked",
-          }
+          },
         );
       }
 
@@ -375,7 +392,7 @@ app.post(
         details: String(e?.message ?? e),
       });
     }
-  }
+  },
 );
 
 app.listen(3001, () => console.log("API running on http://localhost:3001"));

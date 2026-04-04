@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="ClaimCheck icon">
+  <defs>
+    <!-- subtle gradient for a modern look -->
+    <linearGradient id="ccg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+
+    <!-- soft glow -->
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feColorMatrix in="b" type="matrix"
+        values="0 0 0 0 0.08
+                0 0 0 0 0.20
+                0 0 0 0 0.60
+                0 0 0 0.55 0" result="c"/>
+      <feMerge>
+        <feMergeNode in="c"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <style>
+      .shield-outline { stroke: url(#ccg); stroke-width: 8; fill: none; stroke-linejoin: round; }
+      .shield-inner   { stroke: #e2e8f0; stroke-width: 6; fill: none; stroke-linejoin: round; opacity: .9; }
+      .check          { stroke: #16a34a; stroke-width: 10; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .check-draw     { stroke-dasharray: 120; stroke-dashoffset: 120; animation: draw 900ms ease-out 200ms forwards; }
+      .pulse          { transform-origin: 64px 64px; animation: pop 700ms cubic-bezier(.2,.9,.2,1) 0ms both; }
+      @keyframes draw { to { stroke-dashoffset: 0; } }
+      @keyframes pop  { 0% { transform: scale(.92); opacity: .0; } 40% { opacity: 1; } 100% { transform: scale(1); } }
+      @media (prefers-reduced-motion: reduce) {
+        .check-draw, .pulse { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+      }
+    </style>
+  </defs>
+
+  <g class="pulse" filter="url(#glow)">
+    <!-- Shield: slightly angular + unique notch -->
+    <path class="shield-outline"
+      d="M64 10
+         C52 18 39 22 26 24
+         V63
+         C26 87 42 106 64 118
+         C86 106 102 87 102 63
+         V24
+         C89 22 76 18 64 10 Z"/>
+
+    <!-- Inner highlight -->
+    <path class="shield-inner"
+      d="M64 20
+         C54 26 43 29 33 31
+         V62
+         C33 82 46 98 64 108
+         C82 98 95 82 95 62
+         V31
+         C85 29 74 26 64 20 Z"/>
+
+    <!-- Check: draws in -->
+    <path class="check check-draw" d="M42 66 L56 80 L88 48"/>
+  </g>
+</svg>

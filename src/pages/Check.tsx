@@ -4,6 +4,8 @@ import UploadCard from "../components/UploadCard";
 import { saveLastResult } from "../services/storage";
 import type { AnalysisResult } from "../types/analysis";
 import { loadVehicles, removeVehicle } from "../services/vehicles";
+import SavedVehicles from "../components/SavedVehicles";
+import { APP_CONFIG } from "../config";
 
 type DemoScenario = "RED_OWNER" | "GREEN" | "RED_VEHICLE_NO";
 
@@ -34,7 +36,7 @@ async function analyzeViaApi(
   form.append("policy", policy);
   if (dlFile) form.append("dl", dlFile);
 
-  const res = await fetch("http://localhost:3001/analyze", {
+  const res = await fetch(`${APP_CONFIG.apiBaseUrl}/analyze`, {
     method: "POST",
     body: form,
   });
@@ -170,42 +172,6 @@ export default function Check() {
         <p className="text-slate-600 mt-2">
           Check if your insurance claim is ready before you file it
         </p>
-        {saved.length > 0 && (
-          <div className="mt-6 border rounded-xl bg-white p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-900">Saved Vehicles</h3>
-              <span className="text-xs text-slate-500">{saved.length}</span>
-            </div>
-
-            <div className="mt-3 space-y-2">
-              {saved.map((v) => (
-                <div
-                  key={v.vehicleNo}
-                  className="flex items-center justify-between border rounded-lg p-3 bg-slate-50"
-                >
-                  <div>
-                    <p className="font-medium text-slate-900">{v.vehicleNo}</p>
-                    <p className="text-xs text-slate-600">
-                      {v.insurer} • {v.policyType} • Expiry:{" "}
-                      {v.expiryIso ?? "Unknown"}
-                    </p>
-                  </div>
-
-                  <button
-                    className="text-sm text-red-600"
-                    onClick={() => {
-                      removeVehicle(v.vehicleNo);
-                      window.location.reload();
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="mt-6 flex items-center justify-between">
           <h2 className="text-2xl font-semibold text-slate-900">
             Upload your documents
@@ -273,6 +239,12 @@ export default function Check() {
               file={dlFile}
             />
           )}
+          <SavedVehicles
+            onRunCheck={(vehicleNo) => {
+              // v0 behavior: just scroll user to upload section (or later auto-fill vehicle)
+              alert(`Re-check for ${vehicleNo} (auto-fill later)`);
+            }}
+          />
 
           <button
             onClick={onAnalyze}

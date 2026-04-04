@@ -1,5 +1,6 @@
 import { analyzeMock } from "../mock/analyze";
 import type { AnalysisResult } from "../types/analysis";
+import { APP_CONFIG } from "../config";
 
 export type DemoScenario = "RED_OWNER" | "GREEN" | "RED_VEHICLE_NO";
 
@@ -8,7 +9,7 @@ export async function analyzeWithApi(rcFile: File, policyFile: File) {
   fd.append("rc", rcFile);        // MUST be "rc"
   fd.append("policy", policyFile); // MUST be "policy"
 
-  const resp = await fetch("http://localhost:3001/analyze", {
+  const resp = await fetch(`${APP_CONFIG.apiBaseUrl}/analyze`, {
     method: "POST",
     body: fd,
   });

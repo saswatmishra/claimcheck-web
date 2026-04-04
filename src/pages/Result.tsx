@@ -5,10 +5,11 @@ import { loadLastResult } from "../services/storage";
 import { saveVehicle } from "../services/vehicles";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useRef } from "react";
 import html2canvas from "html2canvas";
 import ShareCard from "../components/ShareCard";
+import { APP_CONFIG, getAppUrl } from "../config";
 
 export default function Result() {
   const navigate = useNavigate();
@@ -16,57 +17,10 @@ export default function Result() {
 
   const state = location.state as { result?: AnalysisResult } | undefined;
   const result = state?.result ?? loadLastResult();
-  const vehicleNo =
-    (result?.extracted as any)?.rc?.vehicleNumber ||
-    (result?.extracted as any)?.policy?.vehicleNumber ||
-    "Unknown";
-
-  const insurer = result?.extracted?.policy?.insurer || "Unknown";
-  const expiryIso = result?.extracted?.policy?.expiryIso || null;
-  const policyType = result?.extracted?.policy?.policyType || "Unknown";
-  const risk = (result.risk ?? "AMBER") as "GREEN" | "AMBER" | "RED";
-  const summary = result.summary ?? "Result generated.";
-
-  const findings = result.findings ?? [];
-  const fixes = result.fixes ?? [];
   const checked = useMemo(() => {
     return result?.checked ?? [];
   }, [result]);
   const cardRef = useRef<HTMLDivElement | null>(null);
-
-  async function downloadCardImage() {
-    if (!cardRef.current) return;
-
-    const canvas = await html2canvas(cardRef.current, {
-      scale: 3,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-    });
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `claimcheck-${(
-        result.risk ?? "AMBER"
-      ).toLowerCase()}-result.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }, "image/png");
-  }
-
-  useEffect(() => {
-    const renewalRiskItem = checked.find(
-      (item) => item.label === "Renewal Risk" && item.value === "RED"
-    );
-
-    if (renewalRiskItem) {
-      toast.error(
-        "Policy is expired. Renew immediately to avoid fines and claim risk. "
-      );
-    }
-  }, [checked]);
 
   if (!result) {
     return (
@@ -86,6 +40,19 @@ export default function Result() {
       </div>
     );
   }
+  const analysisResult = result;
+
+  const vehicleNo =
+    (analysisResult?.extracted as any)?.rc?.vehicleNumber ||
+    (analysisResult?.extracted as any)?.policy?.vehicleNumber ||
+    "Unknown";
+  const insurer = analysisResult?.extracted?.policy?.insurer || "Unknown";
+  const expiryIso = analysisResult?.extracted?.policy?.expiryIso || null;
+  const policyType = analysisResult?.extracted?.policy?.policyType || "Unknown";
+  const risk = (analysisResult.risk ?? "AMBER") as "GREEN" | "AMBER" | "RED";
+  const summary = analysisResult.summary ?? "Result generated.";
+  const findings = analysisResult.findings ?? [];
+  const fixes = analysisResult.fixes ?? [];
 
   const riskStyles = {
     RED: "bg-red-50 border-red-200 text-red-800",
@@ -99,39 +66,115 @@ export default function Result() {
     GREEN: "Low Risk",
   } as const;
 
+  function maskVehicle(v?: string) {
+    if (!v || v === "Unknown") return "—";
+    const normalized = v.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    if (!normalized) return "—";
+    return `${normalized.slice(0, 4)}****`;
+  }
+
   function buildShareText(r: AnalysisResult) {
     const risk = (r?.risk ?? "AMBER").toUpperCase();
 
     const riskText =
       risk === "RED"
-        ? "HIGH RISK (RED)"
+        ? "High Risk"
         : risk === "AMBER"
-        ? "MEDIUM RISK (AMBER)"
-        : "LOW RISK (GREEN)";
+          ? "Medium Risk"
+          : "Low Risk";
 
-    const reason = r?.summary?.trim()
-      ? r.summary.trim()
-      : r?.findings?.[0]?.title ?? "No major issues detected";
+    const maskedVehicle = maskVehicle(
+      (r?.extracted as any)?.rc?.vehicleNumber ||
+        (r?.extracted as any)?.policy?.vehicleNumber ||
+        "Unknown",
+    );
 
-    const steps = Array.isArray(r?.fixes?.[0]?.steps) ? r.fixes![0].steps : [];
+    const reason =
+      r?.findings?.[0]?.title?.trim() ||
+      r?.summary?.trim() ||
+      "No major issues detected";
 
-    const stepsBlock =
-      steps.length > 0
-        ? steps.map((s) => `- ${s}`).join("\n")
-        : "- Keep documents updated";
+    const firstLineReason = reason.split("\n")[0].trim();
 
     return [
-      "*ClaimCheck Result*",
+      "*This is my insurance health report*",
       "",
+      `*Vehicle:* ${maskedVehicle}`,
       `*Risk:* ${riskText}`,
-      `*Reason:* ${reason}`,
+      `*Reason:* ${firstLineReason}`,
       "",
-      "*Next steps*",
-      stepsBlock,
-      "",
-      "_Run your own check:_",
-      "http://localhost:5173",
+      `Check yours at ${APP_CONFIG.appName}`,
+      getAppUrl("/"),
     ].join("\n");
+  }
+
+  async function generateCardBlob() {
+    if (!cardRef.current) return;
+
+    const canvas = await html2canvas(cardRef.current, {
+      scale: 3,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+    });
+
+    return new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((blob) => {
+        resolve(blob);
+      }, "image/png");
+    });
+  }
+
+  async function downloadCardImage() {
+    const blob = await generateCardBlob();
+    if (!blob) {
+      toast.error("Couldn’t generate result card image.");
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `claimcheck-${(analysisResult.risk ?? "AMBER").toLowerCase()}-result.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function shareCardOnWhatsApp() {
+    const blob = await generateCardBlob();
+    if (!blob) {
+      toast.error("Couldn’t generate result card image.");
+      return;
+    }
+
+    const filename = `claimcheck-${(analysisResult.risk ?? "AMBER").toLowerCase()}-result.png`;
+    const file = new File([blob], filename, { type: "image/png" });
+    const text = buildShareText(analysisResult);
+
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [file] })
+    ) {
+      try {
+        await navigator.share({
+          files: [file],
+          text,
+          title: "ClaimCheck Result Card",
+        });
+        return;
+      } catch {
+        return;
+      }
+    }
+
+    await downloadCardImage();
+    const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(
+      `${text}\n\n(Attach the downloaded result card image)`,
+    )}`;
+    window.open(fallbackUrl, "_blank");
+    toast.info(
+      "WhatsApp share target isn’t available here. Card downloaded; attach it in WhatsApp."
+    );
   }
 
   return (
@@ -232,12 +275,12 @@ export default function Result() {
             Shareable result card
           </h3>
           <p className="text-sm text-slate-600 mt-1">
-            Download this card and share it on WhatsApp.
+            Share this card directly to WhatsApp.
           </p>
 
           <div className="mt-4 flex justify-center">
             <div ref={cardRef}>
-              <ShareCard result={result} />
+              <ShareCard result={analysisResult} />
             </div>
           </div>
         </div>
@@ -262,7 +305,7 @@ export default function Result() {
                   insurer,
                   savedAt: new Date().toISOString(),
                 });
-                toast.success("Vehicle save initiated!");
+                toast.success("Vehicle saved!");
               }
             }}
             className="border px-5 py-3 rounded-lg"
@@ -278,11 +321,7 @@ export default function Result() {
           </button>
 
           <button
-            onClick={() => {
-              const text = buildShareText(result);
-              const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-              window.open(url, "_blank");
-            }}
+            onClick={shareCardOnWhatsApp}
             className="border px-5 py-3 rounded-lg"
           >
             Share on WhatsApp
