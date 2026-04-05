@@ -16,12 +16,17 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { toLower, startCase } from "lodash-es";
 
 const app = express();
-const allowedOrigins = [
+const port = Number(process.env.PORT || 3001);
+const defaultAllowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "https://claimcheck.co.in",
   "https://www.claimcheck.co.in",
 ];
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS?.split(",").map((origin) => origin.trim()) ||
+  defaultAllowedOrigins
+).filter(Boolean);
 
 app.use(
   cors({
@@ -75,6 +80,14 @@ function formatExpiry(iso) {
   const options = { day: "2-digit", month: "short", year: "numeric" };
   return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", options);
 }
+
+app.get("/", (_req, res) => {
+  res.json({ ok: true, service: "claimcheck-api" });
+});
+
+app.get("/healthz", (_req, res) => {
+  res.json({ ok: true });
+});
 
 app.post(
   "/analyze",
@@ -395,4 +408,4 @@ app.post(
   },
 );
 
-app.listen(3001, () => console.log("API running on http://localhost:3001"));
+app.listen(port, () => console.log(`API running on port ${port}`));
