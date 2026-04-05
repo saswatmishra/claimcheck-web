@@ -14,6 +14,16 @@ import {
 } from "./extract.js";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { toLower, startCase } from "lodash-es";
+import fs from "fs";
+import os from "os";
+import path from "path";
+
+// Create a temp credentials file on Render from the env var
+if (process.env.GOOGLE_CREDENTIALS_JSON) {
+  const keyPath = path.join(os.tmpdir(), "gcp-key.json");
+  fs.writeFileSync(keyPath, process.env.GOOGLE_CREDENTIALS_JSON, "utf8");
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
+}
 
 const app = express();
 const port = Number(process.env.PORT || 3001);

@@ -1,9 +1,9 @@
 import vision from "@google-cloud/vision";
 
-const client = new vision.ImageAnnotatorClient();
+const visionClient = new vision.ImageAnnotatorClient();
 
 export async function ocrBuffer(buffer) {
-  const [result] = await client.textDetection({
+  const [result] = await visionClient.textDetection({
     image: { content: buffer.toString("base64") },
   });
 
