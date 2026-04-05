@@ -124,13 +124,7 @@ export default function Result() {
     });
   }
 
-  async function downloadCardImage() {
-    const blob = await generateCardBlob();
-    if (!blob) {
-      toast.error("Couldn’t generate result card image.");
-      return;
-    }
-
+  function downloadCardBlob(blob: Blob) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -139,7 +133,22 @@ export default function Result() {
     URL.revokeObjectURL(url);
   }
 
+  async function downloadCardImage() {
+    const blob = await generateCardBlob();
+    if (!blob) {
+      toast.error("Couldn’t generate result card image.");
+      return;
+    }
+    downloadCardBlob(blob);
+  }
+
   async function shareCardOnWhatsApp() {
+    const text = buildShareText(analysisResult);
+    const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(
+      `${text}\n\n(Attach the downloaded result card image)`,
+    )}`;
+    const supportsNativeShare = typeof navigator.share === "function";
+
     const blob = await generateCardBlob();
     if (!blob) {
       toast.error("Couldn’t generate result card image.");
@@ -148,33 +157,50 @@ export default function Result() {
 
     const filename = `claimcheck-${(analysisResult.risk ?? "AMBER").toLowerCase()}-result.png`;
     const file = new File([blob], filename, { type: "image/png" });
-    const text = buildShareText(analysisResult);
 
-    if (
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({ files: [file] })
-    ) {
+    if (supportsNativeShare) {
       try {
+        const canShareFiles =
+          typeof navigator.canShare !== "function" ||
+          navigator.canShare({ files: [file] });
+
+        if (canShareFiles) {
+          await navigator.share({
+            files: [file],
+            text,
+            title: "ClaimCheck Result Card",
+          });
+          return;
+        }
+
         await navigator.share({
-          files: [file],
           text,
           title: "ClaimCheck Result Card",
         });
+        downloadCardBlob(blob);
+        toast.info("Caption shared. Attach the downloaded result card in WhatsApp.");
         return;
-      } catch {
-        return;
+      } catch (error: any) {
+        if (error?.name === "AbortError") return;
+        // Fall through to direct WhatsApp navigation.
       }
     }
 
-    await downloadCardImage();
-    const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(
-      `${text}\n\n(Attach the downloaded result card image)`,
-    )}`;
-    window.open(fallbackUrl, "_blank");
-    toast.info(
-      "WhatsApp share target isn’t available here. Card downloaded; attach it in WhatsApp."
-    );
+    try {
+      downloadCardBlob(blob);
+      window.location.href = fallbackUrl;
+      toast.info(
+        "Card downloaded. If WhatsApp opens without the image, attach the downloaded card."
+      );
+      return;
+    } catch {
+      try {
+        window.open(fallbackUrl, "_self");
+        return;
+      } catch {
+        toast.error("Couldn’t open WhatsApp from this browser.");
+      }
+    }
   }
 
   return (
