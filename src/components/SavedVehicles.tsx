@@ -8,7 +8,7 @@ import {
 import { formatDate, daysUntil } from "../utils/dateUtil";
 import { AiTwotoneDelete } from "react-icons/ai";
 import { VscDebugRerun } from "react-icons/vsc";
-import { buildIcs, downloadIcs } from "../services/reminders";
+import { buildRenewalReminderIcs, downloadIcs } from "../services/reminders";
 
 type Props = {
   onRunCheck?: (vehicleNo: string) => void; // optional hook for future "re-check this vehicle"
@@ -161,9 +161,17 @@ export default function SavedVehicles({ onRunCheck }: Props) {
                         className="mt-3 border px-4 py-2 rounded-lg hover:bg-slate-50"
                         disabled={!v.expiryIso}
                         onClick={() => {
-                          const ics = buildIcs({
-                            title: `Renew car insurance: ${v.vehicleNo}`,
-                            dateIso: v.expiryIso!,
+                          const enabledReminderDays = (v.reminders ?? [])
+                            .filter((r) => r.enabled)
+                            .map((r) => r.daysBefore);
+
+                          const ics = buildRenewalReminderIcs({
+                            vehicleNo: v.vehicleNo,
+                            expiryIso: v.expiryIso!,
+                            reminderDays:
+                              enabledReminderDays.length > 0
+                                ? enabledReminderDays
+                                : [30, 15, 7, 1],
                             description: `Insurer: ${
                               v.insurer ?? "Unknown"
                             }\nPolicy Type: ${

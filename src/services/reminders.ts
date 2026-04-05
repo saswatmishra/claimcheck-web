@@ -50,6 +50,85 @@ export function buildIcs({
   return lines.join("\r\n");
 }
 
+function eventLines({
+  title,
+  dateIso,
+  description,
+}: {
+  title: string;
+  dateIso: string;
+  description?: string;
+}) {
+  const dt = dateIso.replaceAll("-", "");
+  const uid = `${dt}-${Math.random().toString(16).slice(2)}@claimcheck`;
+  return [
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
+    `DTSTART;VALUE=DATE:${dt}`,
+    `DTEND;VALUE=DATE:${dt}`,
+    `SUMMARY:${escapeIcs(title)}`,
+    `DESCRIPTION:${escapeIcs(description ?? "")}`,
+    "END:VEVENT",
+  ];
+}
+
+function shiftIsoByDays(dateIso: string, days: number) {
+  const dt = new Date(`${dateIso}T00:00:00`);
+  if (Number.isNaN(dt.getTime())) return null;
+  dt.setDate(dt.getDate() + days);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function buildRenewalReminderIcs({
+  vehicleNo,
+  expiryIso,
+  reminderDays,
+  description,
+}: {
+  vehicleNo: string;
+  expiryIso: string;
+  reminderDays: number[];
+  description?: string;
+}) {
+  const uniqueDays = [...new Set(reminderDays)]
+    .filter((n) => Number.isInteger(n) && n >= 0)
+    .sort((a, b) => b - a);
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//ClaimCheck//EN",
+    "CALSCALE:GREGORIAN",
+  ];
+
+  for (const daysBefore of uniqueDays) {
+    const reminderIso = shiftIsoByDays(expiryIso, -daysBefore);
+    if (!reminderIso) continue;
+    lines.push(
+      ...eventLines({
+        title: `Insurance renewal in ${daysBefore} day(s): ${vehicleNo}`,
+        dateIso: reminderIso,
+        description,
+      }),
+    );
+  }
+
+  lines.push(
+    ...eventLines({
+      title: `Renew car insurance: ${vehicleNo}`,
+      dateIso: expiryIso,
+      description,
+    }),
+  );
+
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
 function escapeIcs(s: string) {
   return (s || "")
     .replace(/\\/g, "\\\\")
