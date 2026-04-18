@@ -5,10 +5,17 @@ import FileDropzone from "../components/FileDropzone";
 import { APP_CONFIG } from "../config";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 
-async function analyzeViaApi(rcFile: File, policyFile: File): Promise<AnalysisData> {
+type DemoScenario = "RED_OWNER" | "GREEN" | "RED_VEHICLE_NO";
+
+async function analyzeViaApi(
+  rcFile: File,
+  policyFile: File,
+  dlFile?: File | null,
+): Promise<AnalysisData> {
   const formData = new FormData();
   formData.append("rc", rcFile);
   formData.append("policy", policyFile);
+  if (dlFile) formData.append("dl", dlFile);
 
   const res = await fetch(`${APP_CONFIG.apiBaseUrl}/analyze`, {
     method: "POST",
@@ -23,23 +30,104 @@ async function analyzeViaApi(rcFile: File, policyFile: File): Promise<AnalysisDa
   return (await res.json()) as AnalysisData;
 }
 
+function analyzeDemo(scenario: DemoScenario): AnalysisData {
+  if (scenario === "GREEN") {
+    return {
+      risk: "GREEN",
+      summary: "No major claim-blocking issues found (demo).",
+      checked: [
+        { label: "RC Owner", value: "YOUR NAME" },
+        { label: "Policyholder", value: "YOUR NAME" },
+        { label: "Policy Expiry", value: "Valid" },
+        { label: "Vehicle Number Match", value: "Yes" },
+      ],
+      findings: [],
+      fixes: [{ title: "Keep it healthy", steps: ["Set renewal reminders."] }],
+    };
+  }
+
+  if (scenario === "RED_VEHICLE_NO") {
+    return {
+      risk: "RED",
+      summary: "High claim rejection risk detected (demo).",
+      checked: [
+        { label: "RC Owner", value: "YOUR NAME" },
+        { label: "Policyholder", value: "YOUR NAME" },
+        { label: "Vehicle Number Match", value: "No" },
+        { label: "Policy Expiry", value: "Not checked" },
+      ],
+      findings: [
+        {
+          code: "VEHICLE_NO_MISMATCH",
+          title: "Vehicle number mismatch",
+          detail: "Vehicle number mismatch can create claim issues.",
+          severity: "critical",
+        },
+      ],
+      fixes: [
+        {
+          title: "Fix vehicle number mismatch",
+          steps: ["Request correction from insurer.", "Re-run ClaimCheck."],
+        },
+      ],
+    };
+  }
+
+  return {
+    risk: "RED",
+    summary: "High claim rejection risk detected (demo).",
+    checked: [
+      { label: "RC Owner", value: "FATHER NAME" },
+      { label: "Policyholder", value: "YOUR NAME" },
+      { label: "Policy Expiry", value: "Not checked" },
+      { label: "Vehicle Number Match", value: "Yes / Not checked" },
+    ],
+    findings: [
+      {
+        code: "OWNER_MISMATCH",
+        title: "RC owner and policyholder don’t match",
+        detail:
+          "Your vehicle RC is in a different person’s name than the insurance policy. This can create claim rejection risk.",
+        severity: "critical",
+      },
+    ],
+    fixes: [
+      {
+        title: "Fix ownership mismatch",
+        steps: [
+          "Confirm whose name is on the RC (registered owner).",
+          "Request endorsement / name transfer with insurer if RC transferred.",
+          "Otherwise transfer RC first or keep policy in RC owner name.",
+        ],
+      },
+    ],
+  };
+}
+
 export default function Check() {
+  const [demoMode, setDemoMode] = useState(false);
+  const [dlUpload, setDlUpload] = useState(false);
+  const [scenario, setScenario] = useState<DemoScenario>("RED_OWNER");
+
   const [rcFile, setRcFile] = useState<File | null>(null);
   const [policyFile, setPolicyFile] = useState<File | null>(null);
+  const [dlFile, setDlFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisData | null>(null);
 
-  const canAnalyze = !!rcFile && !!policyFile && !loading;
+  const canAnalyze = !loading && (demoMode || (!!rcFile && !!policyFile));
 
   const handleAnalyze = async () => {
-    if (!rcFile || !policyFile) return;
+    if (!demoMode && (!rcFile || !policyFile)) return;
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const data = await analyzeViaApi(rcFile, policyFile);
+      const data = demoMode
+        ? analyzeDemo(scenario)
+        : await analyzeViaApi(rcFile!, policyFile!, dlFile);
       setResult(data);
     } catch (err) {
       setError(
@@ -53,6 +141,7 @@ export default function Check() {
   const handleReset = () => {
     setRcFile(null);
     setPolicyFile(null);
+    setDlFile(null);
     setResult(null);
     setError(null);
   };
@@ -86,6 +175,42 @@ export default function Check() {
             </div>
           </div>
 
+          <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <label className="text-sm text-slate-700 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={demoMode}
+                onChange={(e) => setDemoMode(e.target.checked)}
+              />
+              Demo mode
+            </label>
+            <label className="text-sm text-slate-700 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={dlUpload}
+                onChange={(e) => setDlUpload(e.target.checked)}
+              />
+              Upload DL
+            </label>
+          </div>
+
+          {demoMode && (
+            <div className="mb-6">
+              <label className="text-sm font-medium text-slate-700">
+                Demo scenario
+              </label>
+              <select
+                value={scenario}
+                onChange={(e) => setScenario(e.target.value as DemoScenario)}
+                className="mt-2 w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+              >
+                <option value="RED_OWNER">RED: Owner mismatch</option>
+                <option value="GREEN">GREEN: All good</option>
+                <option value="RED_VEHICLE_NO">RED: Vehicle number mismatch</option>
+              </select>
+            </div>
+          )}
+
           <div className="grid gap-6 sm:grid-cols-2">
             <FileDropzone
               label="Registration Certificate (RC)"
@@ -99,16 +224,28 @@ export default function Check() {
               file={policyFile}
               onFileChange={setPolicyFile}
             />
+            {dlUpload && (
+              <div className="sm:col-span-2">
+                <FileDropzone
+                  label="Driving License (Optional)"
+                  description="Upload DL photo/PDF for mismatch checks"
+                  file={dlFile}
+                  onFileChange={setDlFile}
+                />
+              </div>
+            )}
           </div>
 
           <div className="mt-6 flex flex-col items-stretch gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">
-              {canAnalyze
+              {demoMode
+                ? "Demo mode is enabled. Click Analyze to load sample output."
+                : canAnalyze
                 ? "Both documents ready. Click Analyze to begin."
                 : "Upload both documents to enable analysis."}
             </p>
             <div className="flex gap-2">
-              {(rcFile || policyFile || result) && (
+              {(rcFile || policyFile || dlFile || result) && (
                 <button
                   type="button"
                   onClick={handleReset}
