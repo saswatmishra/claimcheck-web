@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FiAlertTriangle, FiLoader, FiStar } from "react-icons/fi";
+import { toast } from "react-toastify";
 import AnalysisResult from "../components/AnalysisResult";
 import FileDropzone from "../components/FileDropzone";
+import ResultActions from "../components/ResultActions";
+import SavedVehiclesList from "../components/SavedVehiclesList";
+import SaveVehicleDialog from "../components/SaveVehicleDialog";
 import { APP_CONFIG } from "../config";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
+import { useSavedVehicles } from "../hooks/use-saved-vehicles";
 
 type DemoScenario = "RED_OWNER" | "GREEN" | "RED_VEHICLE_NO";
 
@@ -104,6 +109,21 @@ function analyzeDemo(scenario: DemoScenario): AnalysisData {
   };
 }
 
+function extractRegNumber(data: AnalysisData): string {
+  const anyData = data as unknown as Record<string, unknown>;
+  const candidates = [
+    anyData.regNumber,
+    anyData.registrationNumber,
+    (anyData.vehicle as Record<string, unknown> | undefined)?.regNumber,
+    (anyData.vehicle as Record<string, unknown> | undefined)?.registrationNumber,
+    (anyData.rc as Record<string, unknown> | undefined)?.regNumber,
+    data.extracted?.rc?.vehicleNumber,
+    data.extracted?.policy?.vehicleNumber,
+  ];
+  const found = candidates.find((c) => typeof c === "string" && c.length > 0);
+  return typeof found === "string" ? found.toUpperCase() : "";
+}
+
 export default function Check() {
   const [demoMode, setDemoMode] = useState(false);
   const [dlUpload, setDlUpload] = useState(false);
@@ -115,14 +135,26 @@ export default function Check() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisData | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [savedRegNumber, setSavedRegNumber] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const { vehicles, save, remove } = useSavedVehicles();
 
   const canAnalyze = !loading && (demoMode || (!!rcFile && !!policyFile));
+  const defaultReg = useMemo(
+    () => (result ? extractRegNumber(result) : ""),
+    [result],
+  );
+  const filenameBase = savedRegNumber
+    ? `claimcheck-${savedRegNumber.replace(/\s+/g, "-")}`
+    : "claimcheck-report";
 
   const handleAnalyze = async () => {
     if (!demoMode && (!rcFile || !policyFile)) return;
     setLoading(true);
     setError(null);
     setResult(null);
+    setSavedRegNumber(null);
 
     try {
       const data = demoMode
@@ -144,6 +176,7 @@ export default function Check() {
     setDlFile(null);
     setResult(null);
     setError(null);
+    setSavedRegNumber(null);
   };
 
   return (
@@ -289,10 +322,54 @@ export default function Check() {
 
         {result && !loading && (
           <section className="mt-10">
-            <AnalysisResult data={result} />
+            <div className="mb-4">
+              <ResultActions
+                data={result}
+                cardRef={cardRef}
+                onSave={() => setSaveDialogOpen(true)}
+                saved={
+                  !!savedRegNumber &&
+                  vehicles.some((v) => v.regNumber === savedRegNumber)
+                }
+                filenameBase={filenameBase}
+              />
+            </div>
+            <div ref={cardRef}>
+              <AnalysisResult data={result} />
+            </div>
           </section>
         )}
+
+        <SavedVehiclesList
+          vehicles={vehicles}
+          onView={(vehicle) => {
+            setResult(vehicle.analysis);
+            setSavedRegNumber(vehicle.regNumber);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onRemove={(id) => {
+            remove(id);
+            toast.success("Saved vehicle removed.");
+          }}
+        />
       </main>
+
+      <SaveVehicleDialog
+        open={saveDialogOpen}
+        defaultRegNumber={defaultReg}
+        onClose={() => setSaveDialogOpen(false)}
+        onSave={({ regNumber, nickname }) => {
+          if (!result) {
+            toast.error("No analysis result to save.");
+            return;
+          }
+
+          save({ regNumber, nickname, analysis: result });
+
+          setSavedRegNumber(regNumber);
+          toast.success("Vehicle saved!");
+        }}
+      />
     </div>
   );
 }

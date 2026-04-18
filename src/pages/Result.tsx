@@ -364,6 +364,7 @@ export default function Result() {
               } else {
                 saveVehicle({
                   vehicleNo,
+                  analysis: analysisResult,
                   expiryIso,
                   policyType,
                   insurer,

@@ -1,3 +1,5 @@
+import type { AnalysisResult } from "../types/analysis";
+
 type ReminderRule = {
   daysBefore: number; // 30, 15, 7, 1
   enabled: boolean;
@@ -5,6 +7,8 @@ type ReminderRule = {
 
 export type SavedVehicle = {
   vehicleNo: string;
+  nickname?: string;
+  analysis?: AnalysisResult;
   expiryIso: string | null;
   policyType: string;
   insurer: string;
