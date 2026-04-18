@@ -1,270 +1,171 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import UploadCard from "../components/UploadCard";
-import { saveLastResult } from "../services/storage";
-import type { AnalysisResult } from "../types/analysis";
-import SavedVehicles from "../components/SavedVehicles";
+import { useState } from "react";
+import { FiAlertTriangle, FiLoader, FiShield, FiStar } from "react-icons/fi";
+import AnalysisResult from "../components/AnalysisResult";
+import FileDropzone from "../components/FileDropzone";
 import { APP_CONFIG } from "../config";
+import type { AnalysisResult as AnalysisData } from "../types/analysis";
 
-type DemoScenario = "RED_OWNER" | "GREEN" | "RED_VEHICLE_NO";
-
-function validateFile(file: File | null): string | null {
-  if (!file) return null;
-
-  const isImage = file.type.startsWith("image/");
-  const isPdf = file.type === "application/pdf";
-
-  if (!isImage && !isPdf) {
-    return "Only image (JPG/PNG) or PDF files are allowed.";
-  }
-
-  const maxMB = 8;
-  if (file.size > maxMB * 1024 * 1024) {
-    return `File must be under ${maxMB}MB.`;
-  }
-  return null;
-}
-
-async function analyzeViaApi(
-  rc: File,
-  policy: File,
-  dlFile: File
-): Promise<AnalysisResult> {
-  const form = new FormData();
-  form.append("rc", rc);
-  form.append("policy", policy);
-  if (dlFile) form.append("dl", dlFile);
+async function analyzeViaApi(rcFile: File, policyFile: File): Promise<AnalysisData> {
+  const formData = new FormData();
+  formData.append("rc", rcFile);
+  formData.append("policy", policyFile);
 
   const res = await fetch(`${APP_CONFIG.apiBaseUrl}/analyze`, {
     method: "POST",
-    body: form,
+    body: formData,
   });
+
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Analyze failed (${res.status}). ${txt}`);
-  }
-  return (await res.json()) as AnalysisResult;
-}
-
-// Local demo analyzer (no upload required)
-function analyzeDemo(scenario: DemoScenario): AnalysisResult {
-  if (scenario === "GREEN") {
-    return {
-      risk: "GREEN",
-      summary: "No major claim-blocking issues found (demo).",
-      checked: [
-        { label: "RC Owner", value: "YOUR NAME" },
-        { label: "Policyholder", value: "YOUR NAME" },
-        { label: "Policy Expiry", value: "Valid" },
-        { label: "Vehicle Number Match", value: "Yes" },
-      ],
-      findings: [],
-      fixes: [{ title: "Keep it healthy", steps: ["Set renewal reminders."] }],
-    };
+    throw new Error(`Analysis failed (${res.status}). ${txt}`);
   }
 
-  if (scenario === "RED_VEHICLE_NO") {
-    return {
-      risk: "RED",
-      summary: "High claim rejection risk detected (demo).",
-      checked: [
-        { label: "RC Owner", value: "YOUR NAME" },
-        { label: "Policyholder", value: "YOUR NAME" },
-        { label: "Vehicle Number Match", value: "No" },
-        { label: "Policy Expiry", value: "Not checked" },
-      ],
-      findings: [
-        {
-          code: "VEHICLE_NO_MISMATCH",
-          title: "Vehicle number mismatch",
-          detail: "Vehicle number mismatch can create claim issues.",
-          severity: "critical",
-        },
-      ],
-      fixes: [
-        {
-          title: "Fix vehicle number mismatch",
-          steps: ["Request correction from insurer.", "Re-run ClaimCheck."],
-        },
-      ],
-    };
-  }
-
-  // RED_OWNER default
-  return {
-    risk: "RED",
-    summary: "High claim rejection risk detected (demo).",
-    checked: [
-      { label: "RC Owner", value: "FATHER NAME" },
-      { label: "Policyholder", value: "YOUR NAME" },
-      { label: "Policy Expiry", value: "Not checked" },
-      { label: "Vehicle Number Match", value: "Yes / Not checked" },
-    ],
-    findings: [
-      {
-        code: "OWNER_MISMATCH",
-        title: "RC owner and policyholder don’t match",
-        detail:
-          "Your vehicle RC is in a different person’s name than the insurance policy. This can create claim rejection risk.",
-        severity: "critical",
-      },
-    ],
-    fixes: [
-      {
-        title: "Fix ownership mismatch",
-        steps: [
-          "Confirm whose name is on the RC (registered owner).",
-          "Request endorsement / name transfer with insurer if RC transferred.",
-          "Otherwise transfer RC first or keep policy in RC owner name.",
-        ],
-      },
-    ],
-  };
+  return (await res.json()) as AnalysisData;
 }
 
 export default function Check() {
-  const navigate = useNavigate();
-
-  const [demoMode, setDemoMode] = useState(false);
-  const [dlUpload, setDlUpload] = useState(false);
-  const [scenario, setScenario] = useState<DemoScenario>("RED_OWNER");
-
   const [rcFile, setRcFile] = useState<File | null>(null);
   const [policyFile, setPolicyFile] = useState<File | null>(null);
-  const [dlFile, setDlFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<AnalysisData | null>(null);
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const canAnalyze = !!rcFile && !!policyFile && !loading;
 
-  const rcError = validateFile(rcFile);
-  const policyError = validateFile(policyFile);
-
-  const canAnalyze = useMemo(() => {
-    if (isAnalyzing) return false;
-    if (demoMode) return true;
-    return !!rcFile && !!policyFile && !rcError && !policyError;
-  }, [demoMode, isAnalyzing, rcFile, policyFile, rcError, policyError]);
-
-  const onAnalyze = async () => {
-    setIsAnalyzing(true);
-    setApiError(null);
+  const handleAnalyze = async () => {
+    if (!rcFile || !policyFile) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
 
     try {
-      const result = demoMode
-        ? analyzeDemo(scenario)
-        : await analyzeViaApi(rcFile!, policyFile!, dlFile!);
-
-      saveLastResult(result);
-      navigate("/result", { state: { result } });
-    } catch (e: any) {
-      setApiError(e?.message ?? "Analyze failed");
+      const data = await analyzeViaApi(rcFile, policyFile);
+      setResult(data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Something went wrong. Please try again.",
+      );
     } finally {
-      setIsAnalyzing(false);
+      setLoading(false);
     }
+  };
+
+  const handleReset = () => {
+    setRcFile(null);
+    setPolicyFile(null);
+    setResult(null);
+    setError(null);
   };
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-xl mx-auto px-6 py-12">
-        <p className="text-slate-600 mt-2">
-          Check if your insurance claim is ready before you file it
-        </p>
-        <div className="mt-6 flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-slate-900">
-            Upload your documents
-          </h2>
+      <main className="mx-auto max-w-6xl px-4 pb-20 pt-10 sm:px-6 sm:pt-16">
+        <section className="mx-auto mb-10 max-w-2xl text-center">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
+            <FiStar className="h-3.5 w-3.5 text-slate-900" />
+            AI-powered verification
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            Verify your RC & Insurance
+            <span className="block text-slate-700">in seconds.</span>
+          </h1>
+          <p className="mt-4 text-base leading-relaxed text-slate-600">
+            Upload your Registration Certificate and Insurance Policy. We detect
+            mismatches, highlight risks, and tell you exactly how to fix them.
+          </p>
+        </section>
 
-          <label className="text-sm text-slate-700 flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={demoMode}
-              onChange={(e) => setDemoMode(e.target.checked)}
-            />
-            Demo mode
-          </label>
-          <label className="text-sm text-slate-700 flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={dlUpload}
-              onChange={(e) => setDlUpload(e.target.checked)}
-            />
-            Upload DL
-          </label>
-        </div>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+              <FiShield className="h-5 w-5 text-slate-900" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-slate-900">ClaimCheck</p>
+              <p className="text-[11px] text-slate-500">Document Risk Analysis</p>
+            </div>
+          </div>
 
-        {demoMode && (
-          <div className="mt-4">
-            <label className="text-sm font-medium text-slate-700">
-              Demo scenario
-            </label>
-            <select
-              value={scenario}
-              onChange={(e) => setScenario(e.target.value as DemoScenario)}
-              className="mt-2 w-full border rounded-lg bg-white p-3"
-            >
-              <option value="RED_OWNER">RED: Owner mismatch</option>
-              <option value="GREEN">GREEN: All good</option>
-              <option value="RED_VEHICLE_NO">
-                RED: Vehicle number mismatch
-              </option>
-            </select>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <FileDropzone
+              label="Registration Certificate (RC)"
+              description="Vehicle registration document issued by RTO"
+              file={rcFile}
+              onFileChange={setRcFile}
+            />
+            <FileDropzone
+              label="Insurance Policy"
+              description="Active insurance policy document"
+              file={policyFile}
+              onFileChange={setPolicyFile}
+            />
+          </div>
+
+          <div className="mt-6 flex flex-col items-stretch gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              {canAnalyze
+                ? "Both documents ready. Click Analyze to begin."
+                : "Upload both documents to enable analysis."}
+            </p>
+            <div className="flex gap-2">
+              {(rcFile || policyFile || result) && (
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  disabled={loading}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Reset
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleAnalyze}
+                disabled={!canAnalyze}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
+              >
+                {loading ? (
+                  <>
+                    <FiLoader className="h-4 w-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <FiStar className="h-4 w-4" />
+                    Analyze Documents
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {error && (
+          <div className="mt-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-semibold">Unable to analyze</p>
+              <p className="mt-0.5 text-red-700">{error}</p>
+            </div>
           </div>
         )}
 
-        <div className="bg-white rounded-xl shadow-sm border p-6 mt-6 space-y-4">
-          <UploadCard
-            label="Registration Certificate (RC)"
-            hint="Upload a clear photo (JPG/PNG) or PDF."
-            onFile={setRcFile}
-            file={rcFile}
-            error={!demoMode && rcFile ? rcError : null}
-          />
+        {loading && (
+          <div className="mt-8 space-y-4">
+            <div className="h-32 animate-pulse rounded-2xl bg-white" />
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="h-64 animate-pulse rounded-2xl bg-white" />
+              <div className="h-64 animate-pulse rounded-2xl bg-white" />
+            </div>
+          </div>
+        )}
 
-          <UploadCard
-            label="Insurance Policy"
-            hint="Upload a clear photo (JPG/PNG) or PDF."
-            onFile={setPolicyFile}
-            file={policyFile}
-            error={!demoMode && policyFile ? policyError : null}
-          />
-
-          {dlUpload && (
-            <UploadCard
-              label="Driving License (Optional)"
-              hint="Upload DL photo/PDF for mismatch checks"
-              onFile={setDlFile}
-              file={dlFile}
-            />
-          )}
-          <SavedVehicles
-            onRunCheck={(vehicleNo) => {
-              // v0 behavior: just scroll user to upload section (or later auto-fill vehicle)
-              alert(`Re-check for ${vehicleNo} (auto-fill later)`);
-            }}
-          />
-
-          <button
-            onClick={onAnalyze}
-            disabled={!canAnalyze}
-            className="w-full bg-slate-900 hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2"
-          >
-            {isAnalyzing ? (
-              <>
-                <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                Analyzing…
-              </>
-            ) : (
-              "Analyze Claim Readiness"
-            )}
-          </button>
-
-          {apiError && <p className="text-sm text-red-600">{apiError}</p>}
-
-          <p className="text-xs text-slate-500">
-            We don’t sell insurance. This is a read-only compliance check.
-          </p>
-        </div>
-      </div>
+        {result && !loading && (
+          <section className="mt-10">
+            <AnalysisResult data={result} />
+          </section>
+        )}
+      </main>
     </div>
   );
 }

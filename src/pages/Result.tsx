@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import RiskBadge from "../components/RiskBadge";
+import RiskBadge, { severityClasses } from "../components/RiskBadge";
 import type { AnalysisResult } from "../types/analysis";
 import { loadLastResult } from "../services/storage";
 import { saveVehicle } from "../services/vehicles";
@@ -10,6 +10,11 @@ import { useRef } from "react";
 import html2canvas from "html2canvas";
 import ShareCard from "../components/ShareCard";
 import { APP_CONFIG, getAppUrl } from "../config";
+import {
+  FiAlertOctagon,
+  FiCheckSquare,
+  FiTool,
+} from "react-icons/fi";
 
 export default function Result() {
   const navigate = useNavigate();
@@ -250,49 +255,82 @@ export default function Result() {
           </div>
         </div>
 
-        {/* Why this rating */}
-        <div className="mt-8">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Why this rating?
-          </h3>
-          <div className="mt-3 space-y-3">
-            {findings.length === 0 ? (
-              <div className="border rounded-lg p-4 bg-slate-50 text-slate-700">
-                No major issues detected from the provided info.
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          {/* Findings */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+                <FiAlertOctagon className="h-4 w-4 text-slate-900" />
               </div>
+              <h3 className="text-base font-semibold text-slate-900">Findings</h3>
+              <span className="ml-auto text-xs text-slate-500">
+                {findings.length} issues
+              </span>
+            </div>
+
+            {findings.length > 0 ? (
+              <ul className="space-y-3">
+                {findings.map((f) => (
+                  <li
+                    key={f.code}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition-colors hover:bg-slate-100/70"
+                  >
+                    <div className="mb-1.5 flex items-start justify-between gap-3">
+                      <h4 className="font-medium text-slate-900">{f.title}</h4>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityClasses(f.severity)}`}
+                        >
+                          {f.severity}
+                        </span>
+                        <span className="text-xs text-slate-400">{f.code}</span>
+                      </div>
+                    </div>
+                    <p className="text-sm leading-relaxed text-slate-600">{f.detail}</p>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              findings.map((f) => (
-                <div key={f.code} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-slate-900">{f.title}</p>
-                    <span className="text-xs text-slate-500">{f.code}</span>
-                  </div>
-                  <p className="text-slate-600 mt-2">{f.detail}</p>
-                </div>
-              ))
+              <p className="text-sm text-slate-600">No findings reported.</p>
             )}
           </div>
-        </div>
 
-        {/* Fix steps */}
-        <div className="mt-10">
-          <h3 className="text-lg font-semibold text-slate-900">How to fix</h3>
-          <div className="mt-3 space-y-4">
-            {fixes.length === 0 ? (
-              <div className="border rounded-lg p-4 bg-slate-50 text-slate-700">
-                Next steps: OCR extraction will run here next.
+          {/* Fixes */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+                <FiTool className="h-4 w-4 text-slate-900" />
               </div>
+              <h3 className="text-base font-semibold text-slate-900">
+                Recommended Fixes
+              </h3>
+            </div>
+
+            {fixes.length > 0 ? (
+              <ul className="space-y-4">
+                {fixes.map((fix, idx) => (
+                  <li key={idx} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    {fix.title ? (
+                      <h4 className="mb-2 font-medium text-slate-900">{fix.title}</h4>
+                    ) : null}
+                    <ol className="space-y-2">
+                      {fix.steps.map((step, j) => (
+                        <li key={j} className="flex gap-3 text-sm text-slate-600">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-900/10 text-[11px] font-semibold text-slate-900">
+                            {j + 1}
+                          </span>
+                          <span className="leading-relaxed">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              fixes.map((fix, idx) => (
-                <div key={idx} className="border rounded-lg p-4 bg-slate-50">
-                  <p className="font-medium text-slate-900">{fix.title}</p>
-                  <ol className="list-decimal ml-5 mt-2 text-slate-700 space-y-1">
-                    {fix.steps.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ol>
-                </div>
-              ))
+              <div className="flex items-center gap-2 text-sm text-slate-600">
+                <FiCheckSquare className="h-4 w-4" />
+                No fixes required.
+              </div>
             )}
           </div>
         </div>

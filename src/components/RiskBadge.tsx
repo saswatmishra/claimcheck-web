@@ -1,27 +1,59 @@
-import type { RiskLevel } from "../types/analysis";
+import { FiAlertCircle, FiAlertTriangle, FiShield } from "react-icons/fi";
+import type { RiskLevel as AnalysisRiskLevel } from "../types/analysis";
 
-export default function RiskBadge({ risk }: { risk: RiskLevel | string }) {
-  const map = {
-    GREEN: {
-      label: "Low Risk",
-      cls: "bg-green-50 text-green-700 border-green-200",
-    },
-    AMBER: {
-      label: "Medium Risk",
-      cls: "bg-amber-50 text-amber-800 border-amber-200",
-    },
-    RED: { label: "High Risk", cls: "bg-red-50 text-red-700 border-red-200" },
-  } as const;
+export type RiskLevel = "RED" | "AMBER" | "GREEN" | string;
 
-  const safe =
-    risk === "GREEN" || risk === "AMBER" || risk === "RED" ? risk : "AMBER";
-  const { label, cls } = map[safe];
+interface RiskBadgeProps {
+  risk: RiskLevel | AnalysisRiskLevel;
+  size?: "sm" | "lg";
+}
+
+const config = {
+  RED: {
+    label: "High Risk",
+    className: "bg-red-100 text-red-700 border border-red-200",
+    Icon: FiAlertTriangle,
+  },
+  AMBER: {
+    label: "Medium Risk",
+    className: "bg-amber-100 text-amber-800 border border-amber-200",
+    Icon: FiAlertCircle,
+  },
+  GREEN: {
+    label: "Low Risk",
+    className: "bg-green-100 text-green-700 border border-green-200",
+    Icon: FiShield,
+  },
+} as const;
+
+export function RiskBadge({ risk, size = "sm" }: RiskBadgeProps) {
+  const key = (risk?.toUpperCase?.() ?? "AMBER") as keyof typeof config;
+  const c = config[key] ?? config.AMBER;
+  const Icon = c.Icon;
 
   return (
     <span
-      className={`inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium ${cls}`}
+      className={[
+        "inline-flex items-center gap-2 rounded-full font-semibold tracking-wide uppercase",
+        size === "lg" ? "px-4 py-2 text-sm" : "px-2.5 py-1 text-xs",
+        c.className,
+      ].join(" ")}
     >
-      {label}
+      <Icon className={size === "lg" ? "h-4 w-4" : "h-3.5 w-3.5"} />
+      {c.label}
     </span>
   );
 }
+
+export function severityClasses(severity?: string) {
+  const s = severity?.toUpperCase?.() ?? "";
+  if (s === "HIGH" || s === "RED" || s === "CRITICAL") {
+    return "bg-red-50 text-red-700 border-red-200";
+  }
+  if (s === "LOW" || s === "GREEN" || s === "INFO") {
+    return "bg-green-50 text-green-700 border-green-200";
+  }
+  return "bg-amber-50 text-amber-800 border-amber-200";
+}
+
+export default RiskBadge;

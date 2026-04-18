@@ -71,6 +71,67 @@ button:focus-visible {
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --radius: 0.875rem;
+
+    --background: oklch(0.985 0.005 240);
+    --foreground: oklch(0.18 0.025 250);
+
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.18 0.025 250);
+
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.18 0.025 250);
+
+    --primary: oklch(0.45 0.18 265);
+    --primary-foreground: oklch(0.99 0.005 240);
+
+    --secondary: oklch(0.96 0.012 250);
+    --secondary-foreground: oklch(0.22 0.03 250);
+
+    --muted: oklch(0.96 0.008 250);
+    --muted-foreground: oklch(0.5 0.02 250);
+
+    --accent: oklch(0.95 0.03 265);
+    --accent-foreground: oklch(0.25 0.08 265);
+
+    --destructive: oklch(0.58 0.22 27);
+    --destructive-foreground: oklch(0.99 0.005 240);
+
+    --border: oklch(0.92 0.01 250);
+    --input: oklch(0.92 0.01 250);
+    --ring: oklch(0.45 0.18 265);
+
+    --risk-red: oklch(0.58 0.22 27);
+    --risk-red-foreground: oklch(0.99 0 0);
+    --risk-red-bg: oklch(0.96 0.04 27);
+
+    --risk-amber: oklch(0.72 0.17 75);
+    --risk-amber-foreground: oklch(0.2 0.05 75);
+    --risk-amber-bg: oklch(0.97 0.05 85);
+
+    --risk-green: oklch(0.6 0.16 155);
+    --risk-green-foreground: oklch(0.99 0 0);
+    --risk-green-bg: oklch(0.96 0.05 155);
+
+    --shadow-soft: 0 1px 2px oklch(0.2 0.04 250 / 0.04), 0 4px 16px oklch(0.2 0.04 250 / 0.06);
+    --shadow-elevated: 0 8px 28px oklch(0.2 0.04 250 / 0.1), 0 2px 6px oklch(0.2 0.04 250 / 0.06);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+  }
+}
+
 @keyframes logoPop {
   0% { transform: scale(0.85); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
@@ -78,5 +139,4 @@ button:focus-visible {
 .logo-pop {
   animation: logoPop 350ms ease-out;
 }
-
 
