@@ -183,10 +183,6 @@ export default function Check() {
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-6xl px-4 pb-20 pt-10 sm:px-6 sm:pt-16">
         <section className="mx-auto mb-10 max-w-2xl text-center">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
-            <FiStar className="h-3.5 w-3.5 text-slate-900" />
-            AI-powered verification
-          </div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
             Verify your RC & Insurance
             <span className="block text-slate-700">in seconds.</span>
