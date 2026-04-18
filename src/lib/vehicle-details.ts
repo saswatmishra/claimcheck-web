@@ -97,6 +97,15 @@ export function extractVehicleDetails(data: AnalysisData): VehicleDetailsView {
   const joined = [make, model].filter(Boolean).join(" ");
   const makeModel = explicitMakeModel ?? (joined.length > 0 ? joined : undefined);
 
+  const chassisLast4Direct = pickString(
+    [vehicle, rc, exRc],
+    ["chassisLast4"],
+  );
+  const engineLast4Direct = pickString(
+    [vehicle, rc, exRc],
+    ["engineLast4"],
+  );
+
   const chassis = pickString(
     [vehicle, rc, exRc],
     ["chassisNumber", "chassis", "chassisNo"],
@@ -130,8 +139,8 @@ export function extractVehicleDetails(data: AnalysisData): VehicleDetailsView {
       )?.toUpperCase(),
       makeModel: makeModel || undefined,
       fuel: pickString([vehicle, rc, exRc], ["fuel", "fuelType", "fuel_type"]),
-      chassisLast4: maskTail(chassis),
-      engineLast4: maskTail(engine),
+      chassisLast4: chassisLast4Direct ?? maskTail(chassis),
+      engineLast4: engineLast4Direct ?? maskTail(engine),
       color: pickString([vehicle, rc, exRc], ["color", "colour"]),
       year: pickString(
         [vehicle, rc, exRc],

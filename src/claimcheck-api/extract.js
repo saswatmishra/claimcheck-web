@@ -285,6 +285,78 @@ export function extractRcOwnerName(rcText) {
   return name || null;
 }
 
+function pickLineValue(text, patterns) {
+  const lines = (text || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    for (const p of patterns) {
+      const m = line.match(p);
+      if (!m) continue;
+      const value = (m[1] || "")
+        .replace(/^[\s:.\-]+/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (value) return value;
+    }
+  }
+  return null;
+}
+
+function last4AlphaNum(value) {
+  if (!value) return null;
+  const cleaned = value.replace(/[^A-Za-z0-9]/g, "");
+  if (cleaned.length < 4) return null;
+  return cleaned.slice(-4).toUpperCase();
+}
+
+export function extractRcMakeModel(text) {
+  const value = pickLineValue(text, [
+    /\b(?:Maker'?s?\s+Class|Maker|Manufacturer)\b\s*[:\-]?\s*(.+)$/i,
+    /\b(?:Model|Vehicle\s+Model)\b\s*[:\-]?\s*(.+)$/i,
+  ]);
+  return value || null;
+}
+
+export function extractRcFuel(text) {
+  const value = pickLineValue(text, [
+    /\b(?:Fuel|Fuel\s*Type)\b\s*[:\-]?\s*(.+)$/i,
+  ]);
+  return value || null;
+}
+
+export function extractRcYear(text) {
+  const value = pickLineValue(text, [
+    /\b(?:Mfg\.?\s*Date|Date\s+of\s+Manufacture|Manufacture\s+Year|Year\s+of\s+Mfg)\b\s*[:\-]?\s*(.+)$/i,
+  ]);
+  if (!value) return null;
+  const y = value.match(/\b(19|20)\d{2}\b/);
+  return y ? y[0] : null;
+}
+
+export function extractRcColor(text) {
+  const value = pickLineValue(text, [
+    /\b(?:Colour|Color)\b\s*[:\-]?\s*(.+)$/i,
+  ]);
+  return value || null;
+}
+
+export function extractRcChassisLast4(text) {
+  const value = pickLineValue(text, [
+    /\b(?:Chassis(?:\s*No\.?)?|Chassis\s*Number)\b\s*[:\-]?\s*(.+)$/i,
+  ]);
+  return last4AlphaNum(value);
+}
+
+export function extractRcEngineLast4(text) {
+  const value = pickLineValue(text, [
+    /\b(?:Engine(?:\s*No\.?)?|Engine\s*Number)\b\s*[:\-]?\s*(.+)$/i,
+  ]);
+  return last4AlphaNum(value);
+}
+
 export function extractPolicyType(text) {
   const t = (text || "").toLowerCase().replace(/\s+/g, " ").trim();
 

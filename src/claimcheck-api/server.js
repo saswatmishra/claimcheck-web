@@ -7,6 +7,12 @@ import {
   extractExpiryDateISO,
   extractPolicyholderName,
   extractRcOwnerName,
+  extractRcMakeModel,
+  extractRcFuel,
+  extractRcYear,
+  extractRcColor,
+  extractRcChassisLast4,
+  extractRcEngineLast4,
   extractPolicyType,
   extractInsurer,
   extractDlHolderName,
@@ -156,6 +162,12 @@ app.post(
       }
 
       const rcVehicleNo = extractVehicleNumber(rcText);
+      const rcMakeModel = extractRcMakeModel(rcText);
+      const rcFuel = extractRcFuel(rcText);
+      const rcYear = extractRcYear(rcText);
+      const rcColor = extractRcColor(rcText);
+      const rcChassisLast4 = extractRcChassisLast4(rcText);
+      const rcEngineLast4 = extractRcEngineLast4(rcText);
       const policyVehicleNo = extractVehicleNumber(policyText);
       const policyType = extractPolicyType(policyText);
 
@@ -389,7 +401,16 @@ app.post(
         summary,
         checked,
         extracted: {
-          rc: { ownerName: rcOwner, vehicleNumber: rcVehicleNo },
+          rc: {
+            ownerName: rcOwner,
+            vehicleNumber: rcVehicleNo,
+            makeModel: rcMakeModel,
+            fuel: rcFuel,
+            year: rcYear,
+            color: rcColor,
+            chassisLast4: rcChassisLast4,
+            engineLast4: rcEngineLast4,
+          },
           policy: {
             policyholderName: policyHolder,
             policyType,
