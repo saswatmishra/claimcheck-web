@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FiAlertTriangle, FiLoader, FiShield, FiStar } from "react-icons/fi";
+import { FiAlertTriangle, FiLoader, FiStar } from "react-icons/fi";
 import AnalysisResult from "../components/AnalysisResult";
 import FileDropzone from "../components/FileDropzone";
 import { APP_CONFIG } from "../config";
@@ -165,16 +165,6 @@ export default function Check() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
-              <FiShield className="h-5 w-5 text-slate-900" />
-            </div>
-            <div>
-              <p className="text-base font-semibold text-slate-900">ClaimCheck</p>
-              <p className="text-[11px] text-slate-500">Document Risk Analysis</p>
-            </div>
-          </div>
-
           <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <label className="text-sm text-slate-700 flex items-center gap-2">
               <input
