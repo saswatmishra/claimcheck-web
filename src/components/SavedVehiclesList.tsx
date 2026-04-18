@@ -1,17 +1,21 @@
 import { FiEye, FiTrash2, FiTruck } from "react-icons/fi";
 import RiskBadge from "./RiskBadge";
 import type { SavedVehicle } from "../hooks/use-saved-vehicles";
+import { buildRenewalReminderIcs, downloadIcs } from "../services/reminders";
+import { formatDate } from "../utils/dateUtil";
 
 interface SavedVehiclesListProps {
   vehicles: SavedVehicle[];
   onView: (vehicle: SavedVehicle) => void;
   onRemove: (id: string) => void;
+  onReminderToggle: (id: string, daysBefore: number, enabled: boolean) => void;
 }
 
 export default function SavedVehiclesList({
   vehicles,
   onView,
   onRemove,
+  onReminderToggle,
 }: SavedVehiclesListProps) {
   if (vehicles.length === 0) return null;
 
@@ -47,6 +51,60 @@ export default function SavedVehiclesList({
             <p className="mb-4 line-clamp-2 text-xs text-muted-foreground">
               {v.analysis.summary}
             </p>
+            <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Renewal
+              </p>
+              <p className="mt-1 text-xs text-slate-700">
+                Expiry: {formatDate(v.expiryIso ?? null)}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[30, 15, 7, 1].map((n) => (
+                  <label
+                    key={`${v.id}-${n}`}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        v.reminders?.some(
+                          (r) => r.daysBefore === n && r.enabled,
+                        ) ?? false
+                      }
+                      onChange={(e) =>
+                        onReminderToggle(v.id, n, e.target.checked)
+                      }
+                    />
+                    {n}d
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={!v.expiryIso}
+                onClick={() => {
+                  if (!v.expiryIso) return;
+                  const enabledReminderDays = (v.reminders ?? [])
+                    .filter((r) => r.enabled)
+                    .map((r) => r.daysBefore);
+                  const ics = buildRenewalReminderIcs({
+                    vehicleNo: v.regNumber,
+                    expiryIso: v.expiryIso,
+                    reminderDays:
+                      enabledReminderDays.length > 0
+                        ? enabledReminderDays
+                        : [30, 15, 7, 1],
+                    description: `Insurer: ${v.insurer ?? "Unknown"}\nPolicy Type: ${
+                      v.policyType ?? "Unknown"
+                    }\nMade with ClaimCheck`,
+                  });
+                  downloadIcs(`renew-${v.regNumber}.ics`, ics);
+                }}
+                className="mt-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add to Calendar
+              </button>
+            </div>
             <div className="mt-auto flex items-center justify-between gap-2">
               <span className="text-[11px] text-muted-foreground">
                 {new Date(v.savedAt).toLocaleDateString()}

@@ -138,7 +138,7 @@ export default function Check() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [savedRegNumber, setSavedRegNumber] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const { vehicles, save, remove } = useSavedVehicles();
+  const { vehicles, save, remove, setReminderEnabled } = useSavedVehicles();
 
   const canAnalyze = !loading && (demoMode || (!!rcFile && !!policyFile));
   const defaultReg = useMemo(
@@ -351,6 +351,9 @@ export default function Check() {
             remove(id);
             toast.success("Saved vehicle removed.");
           }}
+          onReminderToggle={(id, daysBefore, enabled) =>
+            setReminderEnabled(id, daysBefore, enabled)
+          }
         />
       </main>
 

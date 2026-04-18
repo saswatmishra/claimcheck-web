@@ -11,27 +11,27 @@ import {
   getDueReminders,
   markVehicleReminded,
   shouldShowVehicleReminderToday,
-} from "./services/reminders";
-import { loadVehicles } from "./services/vehicles";
+  loadSavedVehicles,
+} from "./hooks/use-saved-vehicles";
 
 export default function App() {
   useEffect(() => {
-    const vehicles = loadVehicles();
-    const due = getDueReminders();
+    const vehicles = loadSavedVehicles();
+    const due = getDueReminders(vehicles);
 
     for (const v of vehicles) {
       if (!shouldShowVehicleReminderToday(v)) continue;
 
-      const matches = due.filter((d) => d.vehicleNo === v.vehicleNo);
+      const matches = due.filter((d) => d.id === v.id);
       if (matches.length === 0) continue;
 
       const soonest = matches.sort((a, b) => a.daysBefore - b.daysBefore)[0];
 
       toast.warn(
-        `Renewal reminder: ${v.vehicleNo} expires in ${soonest.daysBefore} day(s).`
+        `Renewal reminder: ${v.regNumber} expires in ${soonest.daysBefore} day(s).`
       );
 
-      markVehicleReminded(v.vehicleNo);
+      markVehicleReminded(v.id);
     }
   }, []);
 
