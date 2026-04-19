@@ -272,16 +272,35 @@ function formatInrAmount(rawAmount) {
 
 export function extractPolicyNumber(text) {
   const t = normalizeDate(text || "");
+  const isLikelyPolicyNo = (v) => /[0-9]/.test(v) && v.length >= 8;
 
-  const direct = t.match(
-    /\b(?:Policy\s*(?:No\.?|Number)|Policy\s*#)\b\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9\/\-]{5,})\b/i,
-  );
-  if (direct?.[1]) return direct[1].trim().toUpperCase();
+  const linePatterns = [
+    /\bPolicy\s*\/\s*Certificate\s*(?:No\.?|Number)?\b\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
+    /\bPolicy\s*Certificate\s*(?:No\.?|Number)?\b\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
+    /\bPolicy\s*(?:No\.?|Number|#)\b\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
+  ];
 
-  const fallback = t.match(
-    /\b(?:Policy)\b[\s:.\-]{0,10}\b([A-Za-z0-9\/\-]{8,})\b/i,
+  const lines = t
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    for (const pattern of linePatterns) {
+      const match = line.match(pattern);
+      if (!match?.[1]) continue;
+      const candidate = match[1].trim().toUpperCase();
+      if (isLikelyPolicyNo(candidate)) return candidate;
+    }
+  }
+
+  const docWide = t.match(
+    /\bPolicy\s*\/\s*Certificate\s*(?:No\.?|Number)?\b[\s:.\-]{0,20}([A-Za-z0-9\/\-]{8,})\b/i,
   );
-  if (fallback?.[1]) return fallback[1].trim().toUpperCase();
+  if (docWide?.[1]) {
+    const candidate = docWide[1].trim().toUpperCase();
+    if (isLikelyPolicyNo(candidate)) return candidate;
+  }
 
   return null;
 }
@@ -300,6 +319,10 @@ export function extractPolicyIdv(text) {
   if (direct?.[1]) {
     const formatted = formatInrAmount(direct[1]);
     if (formatted) return formatted;
+  }
+
+  if (/\b(?:Act\s*Only|Liability\s*Only|Third\s*Party\s*Only)\b/i.test(t)) {
+    return "Not Applicable";
   }
 
   return null;
