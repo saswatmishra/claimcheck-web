@@ -8,6 +8,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { useMemo } from "react";
 import { useRef } from "react";
 import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import ShareCard from "../components/ShareCard";
 import { APP_CONFIG, getAppUrl } from "../config";
 import {
@@ -113,14 +114,18 @@ export default function Result() {
     ].join("\n");
   }
 
-  async function generateCardBlob() {
+  async function generateCardCanvas() {
     if (!cardRef.current) return;
-
-    const canvas = await html2canvas(cardRef.current, {
+    return html2canvas(cardRef.current, {
       scale: 3,
       backgroundColor: "#ffffff",
       useCORS: true,
     });
+  }
+
+  async function generateCardBlob() {
+    const canvas = await generateCardCanvas();
+    if (!canvas) return null;
 
     return new Promise<Blob | null>((resolve) => {
       canvas.toBlob((blob) => {
@@ -138,13 +143,64 @@ export default function Result() {
     URL.revokeObjectURL(url);
   }
 
-  async function downloadCardImage() {
-    const blob = await generateCardBlob();
-    if (!blob) {
-      toast.error("Couldn’t generate result card image.");
+  async function generateCardPdfBlob() {
+    const canvas = await generateCardCanvas();
+    if (!canvas) return null;
+
+    const dataUrl = canvas.toDataURL("image/png");
+    const ratio = canvas.height / canvas.width;
+    const pdfWidth = 210;
+    const pdfHeight = pdfWidth * ratio;
+    const pdf = new jsPDF({
+      orientation: pdfHeight > pdfWidth ? "portrait" : "landscape",
+      unit: "mm",
+      format: [pdfWidth, pdfHeight],
+    });
+    pdf.addImage(dataUrl, "PNG", 0, 0, pdfWidth, pdfHeight);
+    return pdf.output("blob");
+  }
+
+  function downloadPdfBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function shareResultAsPdf() {
+    const pdfBlob = await generateCardPdfBlob();
+    if (!pdfBlob) {
+      toast.error("Couldn’t generate PDF.");
       return;
     }
-    downloadCardBlob(blob);
+
+    const filename = `claimcheck-${(analysisResult.risk ?? "AMBER").toLowerCase()}-result.pdf`;
+    const file = new File([pdfBlob], filename, { type: "application/pdf" });
+    const supportsNativeShare = typeof navigator.share === "function";
+
+    if (supportsNativeShare) {
+      try {
+        const canShareFiles =
+          typeof navigator.canShare !== "function" ||
+          navigator.canShare({ files: [file] });
+
+        if (canShareFiles) {
+          await navigator.share({
+            files: [file],
+            title: "ClaimCheck Report",
+            text: "Sharing my ClaimCheck insurance health report PDF.",
+          });
+          return;
+        }
+      } catch (error: any) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+
+    downloadPdfBlob(pdfBlob, filename);
+    toast.info("PDF downloaded. Share it as an attachment.");
   }
 
   async function shareCardOnWhatsApp() {
@@ -392,10 +448,10 @@ export default function Result() {
             Share on WhatsApp
           </button>
           <button
-            onClick={downloadCardImage}
+            onClick={shareResultAsPdf}
             className="border px-5 py-3 rounded-lg hover:bg-slate-50"
           >
-            Download Result Card
+            Share PDF
           </button>
         </div>
 
