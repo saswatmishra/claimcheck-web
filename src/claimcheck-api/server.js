@@ -427,6 +427,12 @@ app.post(
             expiryIso,
             vehicleNumber: policyVehicleNo,
           },
+          dl: {
+            provided: dlProvided,
+            holderName: dlHolder,
+            validUptoIso: dlValidUptoIso,
+            validUpto: dlExpiryDate,
+          },
           meta: {
             rcTextLength: rcText?.length ?? 0,
             policyTextLength: policyText?.length ?? 0,

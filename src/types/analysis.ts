@@ -28,7 +28,11 @@ export type AnalysisResult = {
       expiryIso?: string | null;
       vehicleNumber?: string;
     };
+    dl?: {
+      provided?: boolean;
+      holderName?: string | null;
+      validUptoIso?: string | null;
+      validUpto?: string | null;
+    };
   };
-
 };
-

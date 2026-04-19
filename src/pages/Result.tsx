@@ -59,6 +59,23 @@ export default function Result() {
   const summary = analysisResult.summary ?? "Result generated.";
   const findings = analysisResult.findings ?? [];
   const fixes = analysisResult.fixes ?? [];
+  const dlExtracted = analysisResult.extracted?.dl;
+  const dlHolderFromChecked = checked.find((item) => item.label === "DL Holder")?.value;
+  const dlValidFromChecked = checked.find(
+    (item) => item.label === "DL Valid Upto",
+  )?.value;
+  const dlHolder =
+    dlExtracted?.holderName ?? (dlHolderFromChecked && dlHolderFromChecked !== "Unknown"
+      ? dlHolderFromChecked
+      : null);
+  const dlValidUpto =
+    dlExtracted?.validUpto ??
+    (dlValidFromChecked && dlValidFromChecked !== "Not checked"
+      ? dlValidFromChecked
+      : null);
+  const dlProvided =
+    dlExtracted?.provided ?? checked.some((item) => item.label.startsWith("DL "));
+  const dlFindings = findings.filter((item) => item.code.startsWith("DL_"));
 
   const riskStyles = {
     RED: "bg-red-50 border-red-200 text-red-800",
@@ -309,6 +326,75 @@ export default function Result() {
               })
             )}
           </div>
+        </div>
+
+        <div className="mt-6 rounded-lg border p-4 bg-white">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-slate-900">Driving License Insights</h3>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                dlProvided
+                  ? "bg-green-100 text-green-800"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {dlProvided ? "DL uploaded" : "DL not uploaded"}
+            </span>
+          </div>
+
+          {dlProvided ? (
+            <>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">DL Holder</p>
+                  <p className="mt-1 font-medium text-slate-900">
+                    {dlHolder ?? "Couldn’t extract"}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">DL Valid Upto</p>
+                  <p className="mt-1 font-medium text-slate-900">
+                    {dlValidUpto ?? "Couldn’t extract"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  DL-specific findings
+                </p>
+                {dlFindings.length > 0 ? (
+                  <ul className="mt-2 space-y-2">
+                    {dlFindings.map((f) => (
+                      <li
+                        key={f.code}
+                        className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-medium text-slate-900">{f.title}</p>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityClasses(f.severity)}`}
+                          >
+                            {f.severity}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">{f.detail}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-600">
+                    No DL-specific risk findings were detected.
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-slate-600">
+              Uploading a DL enables extra checks like DL expiry and DL-holder vs RC-owner
+              mismatch.
+            </p>
+          )}
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
