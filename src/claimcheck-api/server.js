@@ -164,8 +164,8 @@ app.post(
       }
 
       const rcVehicleNo = extractVehicleNumber(rcText);
-      const rcMakeModel = extractRcMakeModel(rcText);
-      const rcFuel = extractRcFuel(rcText);
+      const rcMakeModel = extractRcMakeModel(rcText) || extractRcMakeModel(policyText);
+      const rcFuel = extractRcFuel(rcText) || extractRcFuel(policyText);
       const rcYear = extractRcYear(rcText);
       const rcColor = extractRcColor(rcText);
       const rcChassisLast4 = extractRcChassisLast4(rcText);

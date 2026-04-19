@@ -385,19 +385,131 @@ function last4AlphaNum(value) {
   return cleaned.slice(-4).toUpperCase();
 }
 
+function toTitleCase(value) {
+  return (value || "")
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function cleanMakeModel(value) {
+  if (!value) return null;
+
+  let out = value
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .trim();
+
+  const stopMatch = out.match(
+    /\b(Seating Capacity|Vehicle Make|RTO Location|Engine(?:\s*&)?\s*Chassis|Fuel|Manufacturing Year|Registration Number|ABOUT YOUR VEHICLE|COVERAGE DETAILS|Policy provides)\b/i,
+  );
+  if (stopMatch?.index && stopMatch.index > 0) {
+    out = out.slice(0, stopMatch.index).trim();
+  }
+
+  const makeAnchor = out.match(
+    /\b(Maruti|Suzuki|Hyundai|Honda|Tata|Mahindra|Toyota|Kia|Renault|Skoda|Volkswagen|Nissan|MG|Ford|BMW|Mercedes|Audi|Jeep)\b/i,
+  );
+  if (makeAnchor?.index && makeAnchor.index > 0) {
+    out = out.slice(makeAnchor.index).trim();
+  }
+
+  out = out.replace(/[,:;\-]+$/, "").trim();
+
+  if (out.length < 3 || out.length > 70) return null;
+  if (!/[A-Za-z]/.test(out)) return null;
+  if (/\b(coverage|policy|premium|registration|engine|chassis)\b/i.test(out))
+    return null;
+
+  return out;
+}
+
+function normalizeFuelValue(value) {
+  if (!value) return null;
+  const v = value.trim().toLowerCase();
+  if (v.includes("petrol")) return "Petrol";
+  if (v.includes("diesel")) return "Diesel";
+  if (v.includes("cng")) return "CNG";
+  if (v.includes("lpg")) return "LPG";
+  if (v.includes("electric")) return "Electric";
+  if (v.includes("hybrid")) return "Hybrid";
+  return null;
+}
+
 export function extractRcMakeModel(text) {
+  const t = normalizeDate(text || "");
+
+  // ACKO: "Car Hyundai i10 Variant Sportz AT"
+  const ackoWithVariant = t.match(
+    /\bCar\s+([A-Za-z0-9][A-Za-z0-9 .,&\-]{2,40}?)\s+Variant\s+([A-Za-z0-9][A-Za-z0-9 .,&\-]{1,35}?)\s+(?:Hypothecation|Registration year|Engine|Reg\.?\s*Authority)/i,
+  );
+  if (ackoWithVariant?.[1]) {
+    const mm = cleanMakeModel(`${ackoWithVariant[1]} ${ackoWithVariant[2] || ""}`);
+    if (mm) return mm;
+  }
+
+  // ACKO top summary: "Car Hyundai i10 Reg. no."
+  const ackoTop = t.match(
+    /\bCar\s+([A-Za-z0-9][A-Za-z0-9 .,&\-]{2,40}?)\s+Reg\.?\s*no\b/i,
+  );
+  if (ackoTop?.[1]) {
+    const mm = cleanMakeModel(ackoTop[1]);
+    if (mm) return mm;
+  }
+
+  // SBI table-style flattened extraction.
+  const sbiTable = t.match(
+    /\b([A-Za-z][A-Za-z0-9 .,&\-]{3,50}?)\s+Seating\s+Capacity\b/i,
+  );
+  if (sbiTable?.[1]) {
+    const mm = cleanMakeModel(sbiTable[1]);
+    if (mm) return mm;
+  }
+
   const value = pickLineValue(text, [
     /\b(?:Maker'?s?\s+Class|Maker|Manufacturer)\b\s*[:\-]?\s*(.+)$/i,
     /\b(?:Model|Vehicle\s+Model)\b\s*[:\-]?\s*(.+)$/i,
   ]);
-  return value || null;
+  return cleanMakeModel(value) || null;
 }
 
 export function extractRcFuel(text) {
+  const t = normalizeDate(text || "");
+
+  // ACKO: "Engine CC/ Fuel type 1197/Petrol"
+  const ackoFuel = t.match(
+    /\bEngine\s*CC\s*\/\s*Fuel\s*type\b\s*[:\-]?\s*(?:\d{3,5}\s*\/\s*)?([A-Za-z]{3,12})\b/i,
+  );
+  const ackoFuelValue = normalizeFuelValue(ackoFuel?.[1] || "");
+  if (ackoFuelValue) return ackoFuelValue;
+
+  // Generic "1234/Petrol" style
+  const displacementFuel = t.match(
+    /\b\d{3,5}\s*\/\s*(Petrol|Diesel|CNG|LPG|Electric|Hybrid)\b/i,
+  );
+  const displacementFuelValue = normalizeFuelValue(displacementFuel?.[1] || "");
+  if (displacementFuelValue) return displacementFuelValue;
+
+  // SBI flattened table near engine/chassis section.
+  const sbiFuel = t.match(
+    /\bEngine\s*&\s*Chassis\s*Number\b[\s\S]{0,140}\b(Petrol|Diesel|CNG|LPG|Electric|Hybrid)\b/i,
+  );
+  const sbiFuelValue = normalizeFuelValue(sbiFuel?.[1] || "");
+  if (sbiFuelValue) return sbiFuelValue;
+
   const value = pickLineValue(text, [
     /\b(?:Fuel|Fuel\s*Type)\b\s*[:\-]?\s*(.+)$/i,
   ]);
-  return value || null;
+  const directFuel = normalizeFuelValue(value || "");
+  if (directFuel) return directFuel;
+
+  // Fallback: pull a known fuel token from a noisy captured line.
+  const fallback = normalizeFuelValue((value || "").replace(/\d+/g, " "));
+  if (fallback) return fallback;
+
+  return null;
 }
 
 export function extractRcYear(text) {
