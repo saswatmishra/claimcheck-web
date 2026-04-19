@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FiBookmark, FiDownload, FiFileText, FiLoader, FiShare2 } from "react-icons/fi";
-import { downloadPdf, downloadPng, shareOnWhatsApp } from "../lib/export-card";
+import { downloadPng, elementToPdfBlob, shareOnWhatsApp, triggerDownload } from "../lib/export-card";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 
 interface ResultActionsProps {
@@ -55,7 +55,31 @@ export default function ResultActions({
     if (!cardRef.current) return;
     setBusy("pdf");
     try {
-      await downloadPdf(cardRef.current, `${filenameBase}.pdf`);
+      const filename = `${filenameBase}.pdf`;
+      const blob = await elementToPdfBlob(cardRef.current);
+      const file = new File([blob], filename, { type: "application/pdf" });
+      const supportsNativeShare = typeof navigator.share === "function";
+
+      if (supportsNativeShare) {
+        try {
+          const canShareFiles =
+            typeof navigator.canShare !== "function" ||
+            navigator.canShare({ files: [file] });
+
+          if (canShareFiles) {
+            await navigator.share({
+              files: [file],
+              title: "ClaimCheck Report",
+              text: "Sharing my ClaimCheck insurance health report PDF.",
+            });
+            return;
+          }
+        } catch (error: any) {
+          if (error?.name === "AbortError") return;
+        }
+      }
+
+      triggerDownload(blob, filename);
     } finally {
       setBusy(null);
     }
@@ -88,7 +112,7 @@ export default function ResultActions({
         ) : (
           <FiFileText className="h-4 w-4" />
         )}
-        Download PDF
+        Share PDF
       </button>
       <button
         type="button"

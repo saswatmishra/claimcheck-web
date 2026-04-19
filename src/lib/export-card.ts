@@ -28,6 +28,11 @@ export async function downloadPng(el: HTMLElement, filename: string) {
 }
 
 export async function downloadPdf(el: HTMLElement, filename: string) {
+  const blob = await elementToPdfBlob(el);
+  triggerDownload(blob, filename);
+}
+
+export async function elementToPdfBlob(el: HTMLElement): Promise<Blob> {
   const dataUrl = await toPng(el, {
     pixelRatio: 2,
     cacheBust: true,
@@ -52,7 +57,7 @@ export async function downloadPdf(el: HTMLElement, filename: string) {
   });
 
   pdf.addImage(dataUrl, "PNG", 0, 0, pdfWidth, pdfHeight);
-  pdf.save(filename);
+  return pdf.output("blob");
 }
 
 export function shareOnWhatsApp(text: string) {
