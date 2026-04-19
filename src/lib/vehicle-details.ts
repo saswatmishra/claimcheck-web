@@ -77,7 +77,31 @@ export interface VehicleDetailsView {
     idv?: string;
     policyType?: string;
   };
+  dl: {
+    provided: boolean;
+    holderName?: string;
+    validUpto?: string;
+    matchToRcOwner: NameMatch;
+  };
   hasAny: boolean;
+}
+
+function pickCheckedValue(root: Dict, label: string): string | undefined {
+  const checked = root.checked;
+  if (!Array.isArray(checked)) return undefined;
+
+  for (const item of checked) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Dict;
+    if (rec.label !== label) continue;
+    const value = rec.value;
+    if (typeof value !== "string") return undefined;
+    const out = value.trim();
+    if (!out || out === "Unknown" || out === "Not checked") return undefined;
+    return out;
+  }
+
+  return undefined;
 }
 
 export function extractVehicleDetails(data: AnalysisData): VehicleDetailsView {
@@ -90,6 +114,7 @@ export function extractVehicleDetails(data: AnalysisData): VehicleDetailsView {
   const extracted = asDict(root.extracted);
   const exRc = asDict(extracted?.rc);
   const exPolicy = asDict(extracted?.policy);
+  const exDl = asDict(extracted?.dl);
 
   const make = pickString([vehicle, rc, exRc], ["make", "manufacturer"]);
   const model = pickString([vehicle, rc, exRc], ["model", "vehicleModel"]);
@@ -118,7 +143,7 @@ export function extractVehicleDetails(data: AnalysisData): VehicleDetailsView {
   const rcOwner = pickString(
     [owners, rc, vehicle, root, exRc],
     ["rcOwner", "ownerName", "owner", "registeredOwner", "rc_owner_name"],
-  );
+  ) ?? pickCheckedValue(root, "RC Owner");
   const insuranceHolder = pickString(
     [owners, policy, insurance, root, exPolicy],
     [
@@ -129,7 +154,17 @@ export function extractVehicleDetails(data: AnalysisData): VehicleDetailsView {
       "insured_name",
       "holderName",
     ],
-  );
+  ) ?? pickCheckedValue(root, "Policyholder");
+  const dlHolder =
+    pickString([exDl], ["holderName"]) ?? pickCheckedValue(root, "DL Holder");
+  const dlValidUpto =
+    pickString([exDl], ["validUpto", "validUptoIso"]) ??
+    pickCheckedValue(root, "DL Valid Upto");
+  const dlProvidedRaw = exDl?.provided;
+  const dlProvided =
+    typeof dlProvidedRaw === "boolean"
+      ? dlProvidedRaw
+      : Boolean(dlHolder || dlValidUpto);
 
   const view: VehicleDetailsView = {
     identity: {
@@ -181,6 +216,12 @@ export function extractVehicleDetails(data: AnalysisData): VehicleDetailsView {
         ["policyType", "type", "coverType"],
       ),
     },
+    dl: {
+      provided: dlProvided,
+      holderName: dlHolder,
+      validUpto: dlValidUpto,
+      matchToRcOwner: compareNames(rcOwner, dlHolder),
+    },
     hasAny: false,
   };
 
@@ -190,6 +231,8 @@ export function extractVehicleDetails(data: AnalysisData): VehicleDetailsView {
     view.owners.insuranceHolder,
     ...Object.values(view.validity),
     ...Object.values(view.insurance),
+    view.dl.holderName,
+    view.dl.validUpto,
   ].some((v) => typeof v === "string" && v.length > 0);
 
   return view;

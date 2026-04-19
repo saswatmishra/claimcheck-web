@@ -87,6 +87,9 @@ export function VehicleDetails({ data }: { data: AnalysisData }) {
 
   const validityShown =
     v.validity.rcFitnessExpiry || v.validity.pucExpiry || v.validity.insuranceExpiry;
+  const dlShown = v.dl.provided || v.dl.holderName || v.dl.validUpto;
+  const dlMatch = matchConfig[v.dl.matchToRcOwner];
+  const DlMatchIcon = dlMatch.Icon;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-8">
@@ -156,9 +159,30 @@ export function VehicleDetails({ data }: { data: AnalysisData }) {
             </div>
           </div>
         )}
+
+        {dlShown && (
+          <div className="rounded-xl border border-border bg-background p-5">
+            <SectionHeader icon={FiFileText} title="Driving License" />
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="DL Holder" value={v.dl.holderName} />
+                <Field label="DL Valid Upto" value={formatDateLike(v.dl.validUpto)} />
+              </div>
+              <div
+                className={[
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold",
+                  dlMatch.className,
+                ].join(" ")}
+              >
+                <DlMatchIcon className="h-3.5 w-3.5" />
+                DL vs RC Owner: {dlMatch.label}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {!identityShown && !insuranceShown && !validityShown && (
+      {!identityShown && !insuranceShown && !validityShown && !dlShown && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <FiFileText className="h-4 w-4" />
           Limited details available from these documents.
