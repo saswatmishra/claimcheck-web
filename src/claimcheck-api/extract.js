@@ -255,6 +255,56 @@ export function extractPolicyholderName(text) {
   return null;
 }
 
+function formatInrAmount(rawAmount) {
+  const normalized = (rawAmount || "").replace(/,/g, "").trim();
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null;
+
+  const value = Number(normalized);
+  if (!Number.isFinite(value)) return null;
+
+  const hasDecimal = normalized.includes(".");
+  const formatted = new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: hasDecimal ? 2 : 0,
+    maximumFractionDigits: hasDecimal ? 2 : 0,
+  }).format(value);
+  return `INR ${formatted}`;
+}
+
+export function extractPolicyNumber(text) {
+  const t = normalizeDate(text || "");
+
+  const direct = t.match(
+    /\b(?:Policy\s*(?:No\.?|Number)|Policy\s*#)\b\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9\/\-]{5,})\b/i,
+  );
+  if (direct?.[1]) return direct[1].trim().toUpperCase();
+
+  const fallback = t.match(
+    /\b(?:Policy)\b[\s:.\-]{0,10}\b([A-Za-z0-9\/\-]{8,})\b/i,
+  );
+  if (fallback?.[1]) return fallback[1].trim().toUpperCase();
+
+  return null;
+}
+
+export function extractPolicyIdv(text) {
+  const t = normalizeDate(text || "");
+  const amountPattern =
+    "(?:₹|INR|Rs\\.?|Rs)?\\s*([0-9][0-9,]*(?:\\.\\d{1,2})?)";
+
+  const direct = t.match(
+    new RegExp(
+      `\\b(?:IDV|Insured\\s*Declared\\s*Value|Insured\\s*Value)\\b[^0-9₹]{0,40}${amountPattern}`,
+      "i",
+    ),
+  );
+  if (direct?.[1]) {
+    const formatted = formatInrAmount(direct[1]);
+    if (formatted) return formatted;
+  }
+
+  return null;
+}
+
 export function extractRcOwnerName(rcText) {
   const lines = (rcText || "")
     .split(/\r?\n/)

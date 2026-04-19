@@ -19,10 +19,16 @@ export type AnalysisResult = {
   fixes: FixStep[];
   checked?: { label: string; value: string }[];
   extracted?: {
-  rc?: { vehicleNumber?: string };
-  policy?: { insurer?: string; policyType?: string; expiryIso?: string | null; vehicleNumber?: string };
-};
+    rc?: { vehicleNumber?: string };
+    policy?: {
+      insurer?: string;
+      policyType?: string;
+      policyNumber?: string;
+      idv?: string;
+      expiryIso?: string | null;
+      vehicleNumber?: string;
+    };
+  };
 
 };
-
 

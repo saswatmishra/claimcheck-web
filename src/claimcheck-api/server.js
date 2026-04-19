@@ -15,6 +15,8 @@ import {
   extractRcEngineLast4,
   extractPolicyType,
   extractInsurer,
+  extractPolicyNumber,
+  extractPolicyIdv,
   extractDlHolderName,
   extractDlValidUptoISO,
 } from "./extract.js";
@@ -170,6 +172,8 @@ app.post(
       const rcEngineLast4 = extractRcEngineLast4(rcText);
       const policyVehicleNo = extractVehicleNumber(policyText);
       const policyType = extractPolicyType(policyText);
+      const policyNumber = extractPolicyNumber(policyText);
+      const idv = extractPolicyIdv(policyText);
 
       const insurer = extractInsurer(policyText);
       let dlHolder = null;
@@ -382,6 +386,8 @@ app.post(
         { label: "Policyholder", value: policyHolder ?? "Unknown" },
         { label: "Policy Expiry", value: expiry ?? "Not checked" },
         { label: "Policy Type", value: policyType ?? "Unknown" },
+        { label: "Policy Number", value: policyNumber ?? "Unknown" },
+        { label: "IDV", value: idv ?? "Unknown" },
         { label: "Vehicle Number Match", value: vehicleMatch ?? "Unknown" },
         { label: "Renewal Risk", value: renewalRisk ?? "Unknown" },
       ];
@@ -414,6 +420,8 @@ app.post(
           policy: {
             policyholderName: policyHolder,
             policyType,
+            policyNumber,
+            idv,
             insurer,
             expiryDate: expiry,
             expiryIso,
