@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { FiCheckCircle, FiFileText, FiUpload, FiX } from "react-icons/fi";
 
 interface FileDropzoneProps {
@@ -18,6 +18,12 @@ export default function FileDropzone({
 }: FileDropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    if (!file && inputRef.current) {
+      inputRef.current.value = "";
+    }
+  }, [file]);
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -51,7 +57,12 @@ export default function FileDropzone({
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
-        onClick={() => !file && inputRef.current?.click()}
+        onClick={() => {
+          if (!file && inputRef.current) {
+            inputRef.current.value = "";
+            inputRef.current.click();
+          }
+        }}
         className={[
           "relative flex min-h-[160px] flex-col items-center justify-center rounded-xl border-2 border-dashed bg-white p-6 text-center transition-all",
           !file ? "cursor-pointer" : "cursor-default",
