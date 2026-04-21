@@ -1,0 +1,16 @@
+export function extractVehicleNumber(text: string): string | null;
+export function extractExpiryDateISO(text: string): string | null;
+export function extractPolicyholderName(text: string): string | null;
+export function extractPolicyNumber(text: string): string | null;
+export function extractPolicyIdv(text: string): string | null;
+export function extractRcOwnerName(rcText: string): string | null;
+export function extractRcMakeModel(text: string): string | null;
+export function extractRcFuel(text: string): string | null;
+export function extractRcYear(text: string): string | null;
+export function extractRcColor(text: string): string | null;
+export function extractRcChassisLast4(text: string): string | null;
+export function extractRcEngineLast4(text: string): string | null;
+export function extractPolicyType(text: string): string;
+export function extractInsurer(text: string): string;
+export function extractDlHolderName(text: string): string | null;
+export function extractDlValidUptoISO(text: string): string | null;
