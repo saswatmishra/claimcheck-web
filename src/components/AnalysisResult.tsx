@@ -144,6 +144,8 @@ export function AnalysisResult({ data }: { data: AnalysisData }) {
   const headline = data.headline ?? copy.headline;
   const summary = data.summary;
   const interpretation = copy.interpretation;
+  const showInterpretation =
+    interpretation.trim().toLowerCase() !== summary.trim().toLowerCase();
   const whyThisRisk = deriveWhyThisRisk(data);
   const checked = data.checked ?? [];
   const documents = deriveDocuments(data);
@@ -169,7 +171,9 @@ export function AnalysisResult({ data }: { data: AnalysisData }) {
             </p>
             <h2 className="mt-2 text-xl font-semibold text-slate-900 sm:text-2xl">{headline}</h2>
             <p className="mt-2 text-sm text-slate-900">{summary}</p>
-            <p className="mt-1 text-sm text-slate-700">{interpretation}</p>
+            {showInterpretation && (
+              <p className="mt-1 text-sm text-slate-700">{interpretation}</p>
+            )}
           </div>
           <RiskBadge risk={data.risk} size="lg" />
         </div>
