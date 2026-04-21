@@ -14,6 +14,12 @@ export type AnalysisData = AnalysisDataType;
 export function AnalysisResult({ data }: { data: AnalysisData }) {
   return (
     <div className="space-y-6">
+      {data.isDemo && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg">
+          This is a demo result. No real documents were analyzed.
+        </div>
+      )}
+
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex-1">

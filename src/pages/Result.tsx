@@ -284,6 +284,12 @@ export default function Result() {
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-2xl mx-auto px-6 py-12">
+        {analysisResult.isDemo && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg mb-4">
+            This is a demo result. No real documents were analyzed.
+          </div>
+        )}
+
         {/* Colored banner */}
         <div className={`border rounded-xl p-4 ${riskStyles[risk]}`}>
           <div className="flex items-center justify-between gap-4">

@@ -13,6 +13,7 @@ export type FixStep = {
 };
 
 export type AnalysisResult = {
+  isDemo?: boolean;
   risk: RiskLevel;
   summary: string;
   findings: Finding[];

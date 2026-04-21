@@ -10,7 +10,38 @@ import { APP_CONFIG } from "../config";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 import { useSavedVehicles } from "../hooks/use-saved-vehicles";
 
-type DemoScenario = "RED_OWNER" | "GREEN" | "RED_VEHICLE_NO";
+type DemoScenario = "GREEN" | "AMBER_EXPIRED" | "RED_VEHICLE_NO";
+type DemoScenarioMeta = {
+  id: DemoScenario;
+  label: string;
+  icon: string;
+  subtitle: string;
+  description: string;
+};
+
+const DEMO_SCENARIOS: DemoScenarioMeta[] = [
+  {
+    id: "GREEN",
+    label: "Safe",
+    icon: "🟢",
+    subtitle: "All Good",
+    description: "RC and policy are consistent. Policy is active.",
+  },
+  {
+    id: "AMBER_EXPIRED",
+    label: "Needs Attention",
+    icon: "🟠",
+    subtitle: "Policy Expired",
+    description: "Details match, but policy appears expired.",
+  },
+  {
+    id: "RED_VEHICLE_NO",
+    label: "High Risk",
+    icon: "🔴",
+    subtitle: "Vehicle No. Mismatch",
+    description: "RC and policy registration number do not match.",
+  },
+];
 
 async function analyzeViaApi(
   rcFile: File,
@@ -38,72 +69,113 @@ async function analyzeViaApi(
 function analyzeDemo(scenario: DemoScenario): AnalysisData {
   if (scenario === "GREEN") {
     return {
+      isDemo: true,
       risk: "GREEN",
-      summary: "No major claim-blocking issues found (demo).",
+      summary: "All key details are consistent. No major issues detected.",
       checked: [
-        { label: "RC Owner", value: "YOUR NAME" },
-        { label: "Policyholder", value: "YOUR NAME" },
-        { label: "Policy Expiry", value: "Valid" },
+        { label: "RC Owner", value: "Rahul Sharma" },
+        { label: "Policyholder", value: "Rahul Sharma" },
+        { label: "Policy Expiry", value: "Active" },
         { label: "Vehicle Number Match", value: "Yes" },
       ],
-      findings: [],
+      findings: [
+        {
+          code: "VEHICLE_NO_MATCH",
+          title: "Vehicle number matches",
+          detail: "Vehicle number in RC and policy is consistent.",
+          severity: "info",
+        },
+        {
+          code: "OWNER_MATCH",
+          title: "Owner name matches",
+          detail: "RC owner and policyholder name match.",
+          severity: "info",
+        },
+        {
+          code: "POLICY_ACTIVE",
+          title: "Policy active",
+          detail: "Policy appears active on the checked date.",
+          severity: "info",
+        },
+      ],
       fixes: [{ title: "Keep it healthy", steps: ["Set renewal reminders."] }],
     };
   }
 
-  if (scenario === "RED_VEHICLE_NO") {
+  if (scenario === "AMBER_EXPIRED") {
     return {
-      risk: "RED",
-      summary: "High claim rejection risk detected (demo).",
+      isDemo: true,
+      risk: "AMBER",
+      summary: "Your policy appears to be expired. This may affect claim eligibility.",
       checked: [
-        { label: "RC Owner", value: "YOUR NAME" },
-        { label: "Policyholder", value: "YOUR NAME" },
-        { label: "Vehicle Number Match", value: "No" },
-        { label: "Policy Expiry", value: "Not checked" },
+        { label: "RC Owner", value: "Rahul Sharma" },
+        { label: "Policyholder", value: "Rahul Sharma" },
+        { label: "Policy Expiry", value: "Expired" },
+        { label: "Vehicle Number Match", value: "Yes" },
       ],
       findings: [
         {
-          code: "VEHICLE_NO_MISMATCH",
-          title: "Vehicle number mismatch",
-          detail: "Vehicle number mismatch can create claim issues.",
-          severity: "critical",
+          code: "VEHICLE_NO_MATCH",
+          title: "Vehicle number matches",
+          detail: "Vehicle number in RC and policy is consistent.",
+          severity: "info",
+        },
+        {
+          code: "OWNER_MATCH",
+          title: "Owner name matches",
+          detail: "RC owner and policyholder name match.",
+          severity: "info",
+        },
+        {
+          code: "POLICY_EXPIRED",
+          title: "Policy expired",
+          detail: "Policy appears expired and may affect claim eligibility.",
+          severity: "warning",
         },
       ],
       fixes: [
         {
-          title: "Fix vehicle number mismatch",
-          steps: ["Request correction from insurer.", "Re-run ClaimCheck."],
+          title: "Renew policy",
+          steps: ["Renew your policy immediately.", "Re-run ClaimCheck after renewal."],
         },
       ],
     };
   }
 
   return {
+    isDemo: true,
     risk: "RED",
-    summary: "High claim rejection risk detected (demo).",
+    summary: "A mismatch was detected between your RC and policy details.",
     checked: [
-      { label: "RC Owner", value: "FATHER NAME" },
-      { label: "Policyholder", value: "YOUR NAME" },
-      { label: "Policy Expiry", value: "Not checked" },
-      { label: "Vehicle Number Match", value: "Yes / Not checked" },
+      { label: "RC Owner", value: "Rahul Sharma" },
+      { label: "Policyholder", value: "Rahul Sharma" },
+      { label: "Policy Expiry", value: "Active" },
+      { label: "Vehicle Number Match", value: "No" },
     ],
     findings: [
       {
-        code: "OWNER_MISMATCH",
-        title: "RC owner and policyholder don’t match",
-        detail:
-          "Your vehicle RC is in a different person’s name than the insurance policy. This can create claim rejection risk.",
+        code: "VEHICLE_NO_MISMATCH",
+        title: "Vehicle number mismatch",
+        detail: "A mismatch was found between RC and policy vehicle number.",
         severity: "critical",
+      },
+      {
+        code: "OWNER_MATCH",
+        title: "Owner name matches",
+        detail: "RC owner and policyholder name match.",
+        severity: "info",
+      },
+      {
+        code: "POLICY_ACTIVE",
+        title: "Policy active",
+        detail: "Policy appears active on the checked date.",
+        severity: "info",
       },
     ],
     fixes: [
       {
-        title: "Fix ownership mismatch",
-        steps: [
-          "Confirm whose name is on the RC (registered owner).",
-          "Request endorsement / name transfer with insurer if RC transferred.",
-          "Otherwise transfer RC first or keep policy in RC owner name.",
-        ],
+        title: "Fix vehicle number mismatch",
+        steps: ["Request correction from insurer.", "Re-run ClaimCheck."],
       },
     ],
   };
@@ -127,7 +199,7 @@ function extractRegNumber(data: AnalysisData): string {
 export default function Check() {
   const [demoMode, setDemoMode] = useState(false);
   const [dlUpload, setDlUpload] = useState(false);
-  const [scenario, setScenario] = useState<DemoScenario>("RED_OWNER");
+  const [scenario, setScenario] = useState<DemoScenario>("GREEN");
 
   const [rcFile, setRcFile] = useState<File | null>(null);
   const [policyFile, setPolicyFile] = useState<File | null>(null);
@@ -140,26 +212,21 @@ export default function Check() {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const { vehicles, save, remove, setReminderEnabled } = useSavedVehicles();
 
-  const canAnalyze = !loading && (demoMode || (!!rcFile && !!policyFile));
-  const defaultReg = useMemo(
-    () => (result ? extractRegNumber(result) : ""),
-    [result],
-  );
+  const canAnalyze = !loading && !!rcFile && !!policyFile;
+  const defaultReg = useMemo(() => (result ? extractRegNumber(result) : ""), [result]);
   const filenameBase = savedRegNumber
     ? `claimcheck-${savedRegNumber.replace(/\s+/g, "-")}`
     : "claimcheck-report";
 
   const handleAnalyze = async () => {
-    if (!demoMode && (!rcFile || !policyFile)) return;
+    if (!rcFile || !policyFile) return;
     setLoading(true);
     setError(null);
     setResult(null);
     setSavedRegNumber(null);
 
     try {
-      const data = demoMode
-        ? analyzeDemo(scenario)
-        : await analyzeViaApi(rcFile!, policyFile!, dlFile);
+      const data = await analyzeViaApi(rcFile, policyFile, dlFile);
       setResult(data);
     } catch (err) {
       setError(
@@ -179,6 +246,24 @@ export default function Check() {
     setSavedRegNumber(null);
   };
 
+  const handleTryDemo = () => {
+    setDemoMode(true);
+    setDlUpload(false);
+    setDlFile(null);
+    setRcFile(null);
+    setPolicyFile(null);
+    setError(null);
+    setSavedRegNumber(null);
+    setResult(analyzeDemo(scenario));
+  };
+
+  const handleExitDemo = () => {
+    setDemoMode(false);
+    setError(null);
+    setResult(null);
+    setSavedRegNumber(null);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-6xl px-4 pb-20 pt-10 sm:px-6 sm:pt-16">
@@ -191,80 +276,137 @@ export default function Check() {
             Upload your Registration Certificate and Insurance Policy. We detect
             mismatches, highlight risks, and tell you exactly how to fix them.
           </p>
+          <p className="mt-2 text-sm text-slate-500">
+            Try demo to see how ClaimCheck works before uploading your documents.
+          </p>
+          <div className="mt-5 flex justify-center gap-3">
+            {!demoMode ? (
+              <button
+                type="button"
+                onClick={handleTryDemo}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+              >
+                Try Demo
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleExitDemo}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+              >
+                Exit Demo
+              </button>
+            )}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <label className="text-sm text-slate-700 flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={demoMode}
-                onChange={(e) => setDemoMode(e.target.checked)}
-              />
-              Demo mode
-            </label>
-            <label className="text-sm text-slate-700 flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={dlUpload}
-                onChange={(e) => setDlUpload(e.target.checked)}
-              />
-              Upload DL
-            </label>
-          </div>
-
-          {demoMode && (
-            <div className="mb-6">
-              <label className="text-sm font-medium text-slate-700">
-                Demo scenario
+          {!demoMode && (
+            <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <label className="text-sm text-slate-700 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={dlUpload}
+                  onChange={(e) => setDlUpload(e.target.checked)}
+                />
+                Upload DL
               </label>
-              <select
-                value={scenario}
-                onChange={(e) => setScenario(e.target.value as DemoScenario)}
-                className="mt-2 w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
-              >
-                <option value="RED_OWNER">RED: Owner mismatch</option>
-                <option value="GREEN">GREEN: All good</option>
-                <option value="RED_VEHICLE_NO">RED: Vehicle number mismatch</option>
-              </select>
             </div>
           )}
 
-          <div className="grid gap-6 sm:grid-cols-2">
-            <FileDropzone
-              label="Registration Certificate (RC)"
-              description="Vehicle registration document issued by RTO"
-              file={rcFile}
-              onFileChange={setRcFile}
-            />
-            <FileDropzone
-              label="Insurance Policy"
-              description="Active insurance policy document"
-              file={policyFile}
-              onFileChange={setPolicyFile}
-            />
-            {dlUpload && (
-              <div className="sm:col-span-2">
-                <FileDropzone
-                  label="Driving License (Optional)"
-                  description="Upload DL photo/PDF for mismatch checks"
-                  file={dlFile}
-                  onFileChange={setDlFile}
-                />
+          {demoMode && (
+            <div className="mb-6">
+              <label className="text-sm font-medium text-slate-700">Demo scenario</label>
+              <div className="mt-2 grid gap-3 md:grid-cols-3">
+                {DEMO_SCENARIOS.map((item) => {
+                  const isActive = item.id === scenario;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setScenario(item.id);
+                        setResult(analyzeDemo(item.id));
+                      }}
+                      className={[
+                        "rounded-xl border p-4 text-left transition-all",
+                        isActive
+                          ? "border-slate-900 bg-slate-50 shadow-sm"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {item.icon} {item.label}
+                        </p>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+                          Demo
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs font-medium text-slate-600">{item.subtitle}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                        {item.description}
+                      </p>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="rounded-md border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-2">
+                          <p className="text-[10px] font-semibold text-slate-700">RC Preview</p>
+                          <div className="mt-1 h-10 rounded bg-slate-100" />
+                        </div>
+                        <div className="rounded-md border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-2">
+                          <p className="text-[10px] font-semibold text-slate-700">
+                            Policy Preview
+                          </p>
+                          <div className="mt-1 h-10 rounded bg-slate-100" />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            )}
-          </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Results load instantly for demo scenarios. No file upload needed.
+              </p>
+            </div>
+          )}
+
+          {!demoMode && (
+            <div className="grid gap-6 sm:grid-cols-2">
+              <FileDropzone
+                label="Registration Certificate (RC)"
+                description="Vehicle registration document issued by RTO"
+                file={rcFile}
+                onFileChange={setRcFile}
+              />
+              <FileDropzone
+                label="Insurance Policy"
+                description="Active insurance policy document"
+                file={policyFile}
+                onFileChange={setPolicyFile}
+              />
+              {dlUpload && (
+                <div className="sm:col-span-2">
+                  <FileDropzone
+                    label="Driving License (Optional)"
+                    description="Upload DL photo/PDF for mismatch checks"
+                    file={dlFile}
+                    onFileChange={setDlFile}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-6 flex flex-col items-stretch gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">
               {demoMode
-                ? "Demo mode is enabled. Click Analyze to load sample output."
+                ? "Demo mode is enabled. Pick a scenario to see instant output."
                 : canAnalyze
-                ? "Both documents ready. Click Analyze to begin."
-                : "Upload both documents to enable analysis."}
+                  ? "Both documents ready. Click Analyze to begin."
+                  : "Upload both documents to enable analysis."}
             </p>
             <div className="flex gap-2">
-              {(rcFile || policyFile || dlFile || result) && (
+              {!demoMode && (rcFile || policyFile || dlFile || result) && (
                 <button
                   type="button"
                   onClick={handleReset}
@@ -274,24 +416,27 @@ export default function Check() {
                   Reset
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleAnalyze}
-                disabled={!canAnalyze}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
-              >
-                {loading ? (
-                  <>
-                    <FiLoader className="h-4 w-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <FiStar className="h-4 w-4" />
-                    Analyze Documents
-                  </>
-                )}
-              </button>
+
+              {!demoMode && (
+                <button
+                  type="button"
+                  onClick={handleAnalyze}
+                  disabled={!canAnalyze}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
+                >
+                  {loading ? (
+                    <>
+                      <FiLoader className="h-4 w-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <FiStar className="h-4 w-4" />
+                      Analyze Documents
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </section>
@@ -324,8 +469,7 @@ export default function Check() {
                 cardRef={cardRef}
                 onSave={() => setSaveDialogOpen(true)}
                 saved={
-                  !!savedRegNumber &&
-                  vehicles.some((v) => v.regNumber === savedRegNumber)
+                  !!savedRegNumber && vehicles.some((v) => v.regNumber === savedRegNumber)
                 }
                 filenameBase={filenameBase}
               />
