@@ -99,6 +99,37 @@ function formatExpiry(iso) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", options);
 }
 
+function headlineByRisk(risk) {
+  if (risk === "RED") return "High claim-risk signals detected";
+  if (risk === "AMBER") return "Some issues may affect claim readiness";
+  return "Low claim-risk signals detected";
+}
+
+function deriveWhyThisRisk(risk, findings) {
+  if (!findings?.length) {
+    return "No major mismatch signals were detected from the uploaded documents on the checks currently supported by ClaimCheck.";
+  }
+
+  const top = findings[0];
+  if (top.code === "VEHICLE_NO_MISMATCH") {
+    return "We found a mismatch between the vehicle number shown on the RC and the number shown on the insurance policy. If these documents do not refer to the same vehicle, an insurer may ask for clarification or corrected records during claim processing.";
+  }
+  if (top.code === "POLICY_EXPIRED") {
+    return "The uploaded policy appears expired. An expired policy can affect claim readiness and may require renewal before proceeding.";
+  }
+  if (top.code === "OWNER_MISMATCH") {
+    return "The RC owner name and policyholder name appear different. This can trigger additional verification and may require endorsement or transfer updates.";
+  }
+
+  if (risk === "RED") {
+    return "One or more critical mismatches were detected and may create problems during claim verification.";
+  }
+  if (risk === "AMBER") {
+    return "One or more warning signals were detected and may affect claim readiness.";
+  }
+  return "The uploaded documents look consistent on the key checks we ran.";
+}
+
 app.get("/", (_req, res) => {
   res.json({ ok: true, service: "claimcheck-api" });
 });
@@ -208,7 +239,7 @@ app.post(
           title: "Couldn’t read document text reliably",
           detail:
             "If your PDF is scanned (image-only), text extraction may be empty. Upload clear photos or a text-based PDF.",
-          severity: "warning",
+          severity: "AMBER",
         });
         fixes.push({
           title: "Improve document readability",
@@ -226,7 +257,7 @@ app.post(
           title: "Policy appears to be Act Only (Liability Only)",
           detail:
             "Act Only policy covers damage or injury caused to others, but does not cover damage to your own vehicle. Please check if this suits your requirement.",
-          severity: "warning",
+          severity: "AMBER",
         });
         fixes.push({
           title: "Confirm coverage type",
@@ -252,7 +283,7 @@ app.post(
             detail:
               renewalMessage ??
               "The policy expiry date looks to be in the past.",
-            severity: "critical",
+            severity: "RED",
           });
           fixes.push({
             title: "Renew your policy",
@@ -266,7 +297,7 @@ app.post(
             code: "RENEWAL_DUE_SOON",
             title: "Policy expires soon",
             detail: renewalMessage ?? "Your policy expiry is within 15 days.",
-            severity: "warning",
+            severity: "AMBER",
           });
           fixes.push({
             title: "Renew soon",
@@ -290,7 +321,7 @@ app.post(
           code: "OWNER_MISMATCH",
           title: "RC owner and policyholder don’t match",
           detail: "Your RC owner name and policyholder name appear different.",
-          severity: "critical",
+          severity: "RED",
         });
         fixes.push({
           title: "Fix ownership mismatch",
@@ -310,7 +341,7 @@ app.post(
           code: "VEHICLE_NO_MISMATCH",
           title: "Vehicle number mismatch",
           detail: "Vehicle number on policy and RC appear different.",
-          severity: "critical",
+          severity: "RED",
         });
         fixes.push({
           title: "Fix vehicle number mismatch",
@@ -341,7 +372,7 @@ app.post(
             title: "Driving license appears expired",
             detail:
               "An expired driving license can lead to claim rejection risk.",
-            severity: "critical",
+            severity: "RED",
           });
           fixes.push({
             title: "Renew your driving license",
@@ -368,7 +399,7 @@ app.post(
             title: "DL holder and RC owner names don’t match",
             detail:
               "If the driver is not the RC owner, insurers may ask for clarification depending on claim type and documents.",
-            severity: "warning",
+            severity: "AMBER",
           });
 
           fixes.push({
@@ -402,10 +433,32 @@ app.post(
         );
       }
 
+      const documents = [
+        { label: "RC", status: "UPLOADED" },
+        { label: "Policy", status: "UPLOADED" },
+        {
+          label: "Driving License",
+          status: dlProvided ? "UPLOADED" : "NOT_UPLOADED",
+          note: dlProvided
+            ? undefined
+            : "Upload to verify license-related risk signals",
+        },
+        { label: "Permit", status: "NOT_REQUIRED" },
+        { label: "Fitness Certificate", status: "NOT_REQUIRED" },
+      ];
+
+      const headline = headlineByRisk(risk);
+      const whyThisRisk = deriveWhyThisRisk(risk, findings);
+      const disclaimer =
+        "ClaimCheck is a read-only document consistency check. Final claim decisions depend on insurer verification, policy terms, applicable regulations, and the facts of the incident.";
+
       return res.json({
         risk,
+        headline,
         summary,
+        whyThisRisk,
         checked,
+        documents,
         extracted: {
           rc: {
             ownerName: rcOwner,
@@ -442,6 +495,7 @@ app.post(
         },
         findings,
         fixes,
+        disclaimer,
       });
     } catch (e) {
       console.error("ANALYZE ERROR:", e);

@@ -4,7 +4,7 @@ export type Finding = {
   code: string;
   title: string;
   detail: string;
-  severity: "info" | "warning" | "critical";
+  severity: RiskLevel;
 };
 
 export type FixStep = {
@@ -12,13 +12,23 @@ export type FixStep = {
   steps: string[];
 };
 
+export type DocumentStatus = {
+  label: string;
+  status: "UPLOADED" | "NOT_UPLOADED" | "NOT_REQUIRED";
+  note?: string;
+};
+
 export type AnalysisResult = {
   isDemo?: boolean;
   risk: RiskLevel;
+  headline?: string;
   summary: string;
+  whyThisRisk?: string;
   findings: Finding[];
   fixes: FixStep[];
   checked?: { label: string; value: string }[];
+  documents?: DocumentStatus[];
+  disclaimer?: string;
   extracted?: {
     rc?: { vehicleNumber?: string };
     policy?: {

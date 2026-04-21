@@ -71,34 +71,50 @@ function analyzeDemo(scenario: DemoScenario): AnalysisData {
     return {
       isDemo: true,
       risk: "GREEN",
+      headline: "Low claim-risk signals detected",
       summary: "All key details are consistent. No major issues detected.",
+      whyThisRisk:
+        "Your RC and policy details are aligned on the checks we ran, with no warning or critical mismatch signals detected in this demo scenario.",
       checked: [
         { label: "RC Owner", value: "Rahul Sharma" },
         { label: "Policyholder", value: "Rahul Sharma" },
         { label: "Policy Expiry", value: "Active" },
         { label: "Vehicle Number Match", value: "Yes" },
       ],
+      documents: [
+        { label: "RC", status: "UPLOADED" },
+        { label: "Policy", status: "UPLOADED" },
+        {
+          label: "Driving License",
+          status: "NOT_UPLOADED",
+          note: "Upload to verify license-related risk signals",
+        },
+        { label: "Permit", status: "NOT_REQUIRED" },
+        { label: "Fitness Certificate", status: "NOT_REQUIRED" },
+      ],
       findings: [
         {
           code: "VEHICLE_NO_MATCH",
           title: "Vehicle number matches",
           detail: "Vehicle number in RC and policy is consistent.",
-          severity: "info",
+          severity: "GREEN",
         },
         {
           code: "OWNER_MATCH",
           title: "Owner name matches",
           detail: "RC owner and policyholder name match.",
-          severity: "info",
+          severity: "GREEN",
         },
         {
           code: "POLICY_ACTIVE",
           title: "Policy active",
           detail: "Policy appears active on the checked date.",
-          severity: "info",
+          severity: "GREEN",
         },
       ],
       fixes: [{ title: "Keep it healthy", steps: ["Set renewal reminders."] }],
+      disclaimer:
+        "ClaimCheck is a read-only document consistency check. Final claim decisions depend on insurer verification, policy terms, applicable regulations, and the facts of the incident.",
     };
   }
 
@@ -106,31 +122,45 @@ function analyzeDemo(scenario: DemoScenario): AnalysisData {
     return {
       isDemo: true,
       risk: "AMBER",
+      headline: "Some issues may affect claim readiness",
       summary: "Your policy appears to be expired. This may affect claim eligibility.",
+      whyThisRisk:
+        "The document details are mostly consistent, but the policy appears expired in this demo scenario. That can reduce claim readiness unless renewal is completed.",
       checked: [
         { label: "RC Owner", value: "Rahul Sharma" },
         { label: "Policyholder", value: "Rahul Sharma" },
         { label: "Policy Expiry", value: "Expired" },
         { label: "Vehicle Number Match", value: "Yes" },
       ],
+      documents: [
+        { label: "RC", status: "UPLOADED" },
+        { label: "Policy", status: "UPLOADED" },
+        {
+          label: "Driving License",
+          status: "NOT_UPLOADED",
+          note: "Upload to verify license-related risk signals",
+        },
+        { label: "Permit", status: "NOT_REQUIRED" },
+        { label: "Fitness Certificate", status: "NOT_REQUIRED" },
+      ],
       findings: [
         {
           code: "VEHICLE_NO_MATCH",
           title: "Vehicle number matches",
           detail: "Vehicle number in RC and policy is consistent.",
-          severity: "info",
+          severity: "GREEN",
         },
         {
           code: "OWNER_MATCH",
           title: "Owner name matches",
           detail: "RC owner and policyholder name match.",
-          severity: "info",
+          severity: "GREEN",
         },
         {
           code: "POLICY_EXPIRED",
           title: "Policy expired",
           detail: "Policy appears expired and may affect claim eligibility.",
-          severity: "warning",
+          severity: "AMBER",
         },
       ],
       fixes: [
@@ -139,45 +169,58 @@ function analyzeDemo(scenario: DemoScenario): AnalysisData {
           steps: ["Renew your policy immediately.", "Re-run ClaimCheck after renewal."],
         },
       ],
+      disclaimer:
+        "ClaimCheck is a read-only document consistency check. Final claim decisions depend on insurer verification, policy terms, applicable regulations, and the facts of the incident.",
     };
   }
 
   return {
     isDemo: true,
     risk: "RED",
-    summary: "A mismatch was detected between your RC and policy details.",
+    headline: "High claim-risk signals detected",
+    summary:
+      "One or more critical mismatches may create problems during claim verification.",
+    whyThisRisk:
+      "We found a mismatch between the vehicle number shown on the RC and the number shown on the insurance policy. If these documents do not refer to the same vehicle, an insurer may ask for clarification or corrected records during claim processing.",
     checked: [
-      { label: "RC Owner", value: "Rahul Sharma" },
-      { label: "Policyholder", value: "Rahul Sharma" },
-      { label: "Policy Expiry", value: "Active" },
-      { label: "Vehicle Number Match", value: "No" },
+      { label: "Vehicle Number (RC)", value: "OD02AB1234" },
+      { label: "Vehicle Number (Policy)", value: "OD02AB1243" },
+      { label: "Owner Name", value: "Rohit Sharma" },
+      { label: "Policy Status", value: "Active" },
+    ],
+    documents: [
+      { label: "RC", status: "UPLOADED" },
+      { label: "Policy", status: "UPLOADED" },
+      {
+        label: "Driving License",
+        status: "NOT_UPLOADED",
+        note: "Upload to verify license-related risk signals",
+      },
+      { label: "Permit", status: "NOT_REQUIRED" },
+      { label: "Fitness Certificate", status: "NOT_REQUIRED" },
     ],
     findings: [
       {
-        code: "VEHICLE_NO_MISMATCH",
-        title: "Vehicle number mismatch",
-        detail: "A mismatch was found between RC and policy vehicle number.",
-        severity: "critical",
-      },
-      {
-        code: "OWNER_MATCH",
-        title: "Owner name matches",
-        detail: "RC owner and policyholder name match.",
-        severity: "info",
-      },
-      {
-        code: "POLICY_ACTIVE",
-        title: "Policy active",
-        detail: "Policy appears active on the checked date.",
-        severity: "info",
+        code: "VEHICLE_MISMATCH",
+        title: "Vehicle Number Mismatch",
+        detail:
+          "The vehicle number on your RC does not match the number shown on the insurance policy.",
+        severity: "RED",
       },
     ],
     fixes: [
       {
-        title: "Fix vehicle number mismatch",
-        steps: ["Request correction from insurer.", "Re-run ClaimCheck."],
+        title: "Verify and correct policy details",
+        steps: [
+          "Check whether the correct policy file was uploaded",
+          "Confirm the vehicle number on the insurer-issued policy",
+          "Contact the insurer if the policy details need correction",
+          "Re-upload the corrected document and run the check again",
+        ],
       },
     ],
+    disclaimer:
+      "ClaimCheck is a read-only document consistency check. Final claim decisions depend on insurer verification, policy terms, applicable regulations, and the facts of the incident.",
   };
 }
 
@@ -463,6 +506,35 @@ export default function Check() {
 
         {result && !loading && (
           <section className="mt-10">
+            <div className="mb-4 flex flex-wrap gap-2">
+              {!demoMode ? (
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+                >
+                  Run another check
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const order: DemoScenario[] = [
+                      "GREEN",
+                      "AMBER_EXPIRED",
+                      "RED_VEHICLE_NO",
+                    ];
+                    const idx = order.indexOf(scenario);
+                    const next = order[(idx + 1) % order.length];
+                    setScenario(next);
+                    setResult(analyzeDemo(next));
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+                >
+                  Try another scenario
+                </button>
+              )}
+            </div>
             <div className="mb-4">
               <ResultActions
                 data={result}

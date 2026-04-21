@@ -1,40 +1,29 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import RiskBadge, { severityClasses } from "../components/RiskBadge";
-import type { AnalysisResult } from "../types/analysis";
+import type { AnalysisResult as AnalysisData } from "../types/analysis";
 import { loadLastResult } from "../services/storage";
 import { saveVehicle } from "../services/vehicles";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { useMemo } from "react";
 import { useRef } from "react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import ShareCard from "../components/ShareCard";
 import { APP_CONFIG, getAppUrl } from "../config";
-import {
-  FiAlertOctagon,
-  FiCheckSquare,
-  FiTool,
-} from "react-icons/fi";
+import AnalysisResult from "../components/AnalysisResult";
 
 export default function Result() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const state = location.state as { result?: AnalysisResult } | undefined;
+  const state = location.state as { result?: AnalysisData } | undefined;
   const result = state?.result ?? loadLastResult();
-  const checked = useMemo(() => {
-    return result?.checked ?? [];
-  }, [result]);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   if (!result) {
     return (
       <div className="min-h-screen bg-white">
         <div className="max-w-2xl mx-auto px-6 py-12">
-          <h2 className="text-2xl font-semibold text-slate-900">
-            No result found
-          </h2>
+          <h2 className="text-2xl font-semibold text-slate-900">No result found</h2>
           <p className="text-slate-600 mt-2">Please run a check again.</p>
           <button
             className="mt-6 bg-slate-900 text-white px-5 py-3 rounded-lg"
@@ -46,48 +35,15 @@ export default function Result() {
       </div>
     );
   }
+
   const analysisResult = result;
-
   const vehicleNo =
-    (analysisResult?.extracted as any)?.rc?.vehicleNumber ||
-    (analysisResult?.extracted as any)?.policy?.vehicleNumber ||
+    analysisResult.extracted?.rc?.vehicleNumber ||
+    analysisResult.extracted?.policy?.vehicleNumber ||
     "Unknown";
-  const insurer = analysisResult?.extracted?.policy?.insurer || "Unknown";
-  const expiryIso = analysisResult?.extracted?.policy?.expiryIso || null;
-  const policyType = analysisResult?.extracted?.policy?.policyType || "Unknown";
-  const risk = (analysisResult.risk ?? "AMBER") as "GREEN" | "AMBER" | "RED";
-  const summary = analysisResult.summary ?? "Result generated.";
-  const findings = analysisResult.findings ?? [];
-  const fixes = analysisResult.fixes ?? [];
-  const dlExtracted = analysisResult.extracted?.dl;
-  const dlHolderFromChecked = checked.find((item) => item.label === "DL Holder")?.value;
-  const dlValidFromChecked = checked.find(
-    (item) => item.label === "DL Valid Upto",
-  )?.value;
-  const dlHolder =
-    dlExtracted?.holderName ?? (dlHolderFromChecked && dlHolderFromChecked !== "Unknown"
-      ? dlHolderFromChecked
-      : null);
-  const dlValidUpto =
-    dlExtracted?.validUpto ??
-    (dlValidFromChecked && dlValidFromChecked !== "Not checked"
-      ? dlValidFromChecked
-      : null);
-  const dlProvided =
-    dlExtracted?.provided ?? checked.some((item) => item.label.startsWith("DL "));
-  const dlFindings = findings.filter((item) => item.code.startsWith("DL_"));
-
-  const riskStyles = {
-    RED: "bg-red-50 border-red-200 text-red-800",
-    AMBER: "bg-amber-50 border-amber-200 text-amber-900",
-    GREEN: "bg-green-50 border-green-200 text-green-900",
-  } as const;
-
-  const riskTitle = {
-    RED: "High Risk",
-    AMBER: "Medium Risk",
-    GREEN: "Low Risk",
-  } as const;
+  const insurer = analysisResult.extracted?.policy?.insurer || "Unknown";
+  const expiryIso = analysisResult.extracted?.policy?.expiryIso || null;
+  const policyType = analysisResult.extracted?.policy?.policyType || "Unknown";
 
   function maskVehicle(v?: string) {
     if (!v || v === "Unknown") return "—";
@@ -96,26 +52,18 @@ export default function Result() {
     return `${normalized.slice(0, 4)}****`;
   }
 
-  function buildShareText(r: AnalysisResult) {
+  function buildShareText(r: AnalysisData) {
     const risk = (r?.risk ?? "AMBER").toUpperCase();
 
     const riskText =
-      risk === "RED"
-        ? "High Risk"
-        : risk === "AMBER"
-          ? "Medium Risk"
-          : "Low Risk";
+      risk === "RED" ? "High Risk" : risk === "AMBER" ? "Medium Risk" : "Low Risk";
 
     const maskedVehicle = maskVehicle(
-      (r?.extracted as any)?.rc?.vehicleNumber ||
-        (r?.extracted as any)?.policy?.vehicleNumber ||
-        "Unknown",
+      r.extracted?.rc?.vehicleNumber || r.extracted?.policy?.vehicleNumber || "Unknown",
     );
 
     const reason =
-      r?.findings?.[0]?.title?.trim() ||
-      r?.summary?.trim() ||
-      "No major issues detected";
+      r.findings?.[0]?.title?.trim() || r.summary?.trim() || "No major issues detected";
 
     const firstLineReason = reason.split("\n")[0].trim();
 
@@ -200,8 +148,7 @@ export default function Result() {
     if (supportsNativeShare) {
       try {
         const canShareFiles =
-          typeof navigator.canShare !== "function" ||
-          navigator.canShare({ files: [file] });
+          typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] });
 
         if (canShareFiles) {
           await navigator.share({
@@ -239,8 +186,7 @@ export default function Result() {
     if (supportsNativeShare) {
       try {
         const canShareFiles =
-          typeof navigator.canShare !== "function" ||
-          navigator.canShare({ files: [file] });
+          typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] });
 
         if (canShareFiles) {
           await navigator.share({
@@ -260,16 +206,13 @@ export default function Result() {
         return;
       } catch (error: any) {
         if (error?.name === "AbortError") return;
-        // Fall through to direct WhatsApp navigation.
       }
     }
 
     try {
       downloadCardBlob(blob);
       window.location.href = fallbackUrl;
-      toast.info(
-        "Card downloaded. If WhatsApp opens without the image, attach the downloaded card."
-      );
+      toast.info("Card downloaded. If WhatsApp opens without the image, attach the card.");
       return;
     } catch {
       try {
@@ -283,212 +226,12 @@ export default function Result() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-2xl mx-auto px-6 py-12">
-        {analysisResult.isDemo && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg mb-4">
-            This is a demo result. No real documents were analyzed.
-          </div>
-        )}
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        <AnalysisResult data={analysisResult} />
 
-        {/* Colored banner */}
-        <div className={`border rounded-xl p-4 ${riskStyles[risk]}`}>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold">{riskTitle[risk]}</p>
-              <p className="text-sm mt-1">{summary}</p>
-            </div>
-            <RiskBadge risk={risk} />
-          </div>
-        </div>
-
-        {/* Header */}
-        <div className="mt-8">
-          <h2 className="text-2xl font-semibold text-slate-900">
-            Your ClaimCheck Result
-          </h2>
-          <p className="text-slate-600 mt-1">
-            Document consistency + claim-readiness signals
-          </p>
-        </div>
-
-        {/* What we checked */}
-        <div className="mt-6 border rounded-lg p-4 bg-slate-50">
-          <h3 className="font-semibold text-slate-900">What we checked</h3>
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {checked.length === 0 ? (
-              <div className="text-sm text-slate-600">
-                No extracted fields yet.
-              </div>
-            ) : (
-              checked.map((item, idx) => {
-                return (
-                  <div key={idx} className="bg-white border rounded-lg p-3">
-                    <p className="text-xs text-slate-500">{item.label}</p>
-                    <p className="text-slate-900 font-medium mt-1">
-                      {item.value}
-                    </p>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        <div className="mt-6 rounded-lg border p-4 bg-white">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-semibold text-slate-900">Driving License Insights</h3>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                dlProvided
-                  ? "bg-green-100 text-green-800"
-                  : "bg-slate-100 text-slate-600"
-              }`}
-            >
-              {dlProvided ? "DL uploaded" : "DL not uploaded"}
-            </span>
-          </div>
-
-          {dlProvided ? (
-            <>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">DL Holder</p>
-                  <p className="mt-1 font-medium text-slate-900">
-                    {dlHolder ?? "Couldn’t extract"}
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">DL Valid Upto</p>
-                  <p className="mt-1 font-medium text-slate-900">
-                    {dlValidUpto ?? "Couldn’t extract"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                  DL-specific findings
-                </p>
-                {dlFindings.length > 0 ? (
-                  <ul className="mt-2 space-y-2">
-                    {dlFindings.map((f) => (
-                      <li
-                        key={f.code}
-                        className="rounded-lg border border-slate-200 bg-slate-50 p-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="font-medium text-slate-900">{f.title}</p>
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityClasses(f.severity)}`}
-                          >
-                            {f.severity}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-slate-600">{f.detail}</p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-sm text-slate-600">
-                    No DL-specific risk findings were detected.
-                  </p>
-                )}
-              </div>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-slate-600">
-              Uploading a DL enables extra checks like DL expiry and DL-holder vs RC-owner
-              mismatch.
-            </p>
-          )}
-        </div>
-
-        <div className="mt-8 grid gap-6 lg:grid-cols-2">
-          {/* Findings */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
-                <FiAlertOctagon className="h-4 w-4 text-slate-900" />
-              </div>
-              <h3 className="text-base font-semibold text-slate-900">Findings</h3>
-              <span className="ml-auto text-xs text-slate-500">
-                {findings.length} issues
-              </span>
-            </div>
-
-            {findings.length > 0 ? (
-              <ul className="space-y-3">
-                {findings.map((f) => (
-                  <li
-                    key={f.code}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition-colors hover:bg-slate-100/70"
-                  >
-                    <div className="mb-1.5 flex items-start justify-between gap-3">
-                      <h4 className="font-medium text-slate-900">{f.title}</h4>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityClasses(f.severity)}`}
-                        >
-                          {f.severity}
-                        </span>
-                        <span className="text-xs text-slate-400">{f.code}</span>
-                      </div>
-                    </div>
-                    <p className="text-sm leading-relaxed text-slate-600">{f.detail}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-600">No findings reported.</p>
-            )}
-          </div>
-
-          {/* Fixes */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
-                <FiTool className="h-4 w-4 text-slate-900" />
-              </div>
-              <h3 className="text-base font-semibold text-slate-900">
-                Recommended Fixes
-              </h3>
-            </div>
-
-            {fixes.length > 0 ? (
-              <ul className="space-y-4">
-                {fixes.map((fix, idx) => (
-                  <li key={idx} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    {fix.title ? (
-                      <h4 className="mb-2 font-medium text-slate-900">{fix.title}</h4>
-                    ) : null}
-                    <ol className="space-y-2">
-                      {fix.steps.map((step, j) => (
-                        <li key={j} className="flex gap-3 text-sm text-slate-600">
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-900/10 text-[11px] font-semibold text-slate-900">
-                            {j + 1}
-                          </span>
-                          <span className="leading-relaxed">{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-slate-600">
-                <FiCheckSquare className="h-4 w-4" />
-                No fixes required.
-              </div>
-            )}
-          </div>
-        </div>
         <div className="mt-10">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Shareable result card
-          </h3>
-          <p className="text-sm text-slate-600 mt-1">
-            Share this card directly to WhatsApp.
-          </p>
+          <h3 className="text-lg font-semibold text-slate-900">Shareable result card</h3>
+          <p className="text-sm text-slate-600 mt-1">Share this card directly to WhatsApp.</p>
 
           <div className="mt-4 flex justify-center">
             <div ref={cardRef}>
@@ -526,19 +269,14 @@ export default function Result() {
             Save this vehicle
           </button>
 
-          <button
-            onClick={() => window.print()}
-            className="border px-5 py-3 rounded-lg"
-          >
+          <button onClick={() => window.print()} className="border px-5 py-3 rounded-lg">
             Print / Save
           </button>
 
-          <button
-            onClick={shareCardOnWhatsApp}
-            className="border px-5 py-3 rounded-lg"
-          >
+          <button onClick={shareCardOnWhatsApp} className="border px-5 py-3 rounded-lg">
             Share on WhatsApp
           </button>
+
           <button
             onClick={shareResultAsPdf}
             className="border px-5 py-3 rounded-lg hover:bg-slate-50"
@@ -546,13 +284,6 @@ export default function Result() {
             Share PDF
           </button>
         </div>
-
-        <p className="text-xs text-slate-500 mt-6">
-          Disclaimer: ClaimCheck provides a document consistency check and
-          general guidance. Claims can fail for many reasons (late intimation,
-          license issues, policy lapses, etc.). Final decisions depend on
-          insurer terms and verification.
-        </p>
       </div>
       <ToastContainer />
     </div>
