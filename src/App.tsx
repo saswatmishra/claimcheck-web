@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Check from "./pages/Check";
 import Result from "./pages/Result";
+import VehicleShare from "./pages/VehicleShare";
 import Navbar from "./components/Navbar";
 import { useEffect } from "react";
 import { ToastContainer, toast } from "react-toastify";
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/check" element={<Check />} />
           <Route path="/result" element={<Result />} />
+          <Route path="/v/:id" element={<VehicleShare />} />
         </Routes>
       </BrowserRouter>
       <ToastContainer />

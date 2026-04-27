@@ -9,6 +9,7 @@ import SaveVehicleDialog from "../components/SaveVehicleDialog";
 import { APP_CONFIG } from "../config";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 import { useSavedVehicles } from "../hooks/use-saved-vehicles";
+import { getVehicleShareUrl } from "../services/share-links";
 
 type DemoScenario = "GREEN" | "AMBER_EXPIRED" | "RED_VEHICLE_NO";
 type DemoScenarioMeta = {
@@ -237,6 +238,23 @@ function extractRegNumber(data: AnalysisData): string {
   ];
   const found = candidates.find((c) => typeof c === "string" && c.length > 0);
   return typeof found === "string" ? found.toUpperCase() : "";
+}
+
+async function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const input = document.createElement("input");
+  input.value = text;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  document.execCommand("copy");
+  document.body.removeChild(input);
 }
 
 export default function Check() {
@@ -566,6 +584,19 @@ export default function Check() {
           onReminderToggle={(id, daysBefore, enabled) =>
             setReminderEnabled(id, daysBefore, enabled)
           }
+          onShareLink={async (vehicle) => {
+            try {
+              await copyText(
+                getVehicleShareUrl(vehicle.analysis, {
+                  regNumber: vehicle.regNumber,
+                  nickname: vehicle.nickname,
+                }),
+              );
+              toast.success("Share link copied.");
+            } catch {
+              toast.error("Couldn’t copy share link.");
+            }
+          }}
         />
       </main>
 

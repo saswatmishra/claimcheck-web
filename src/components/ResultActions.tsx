@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { FiBookmark, FiDownload, FiFileText, FiLoader, FiShare2 } from "react-icons/fi";
+import { FiBookmark, FiDownload, FiFileText, FiLink, FiLoader, FiShare2 } from "react-icons/fi";
 import { downloadPng, elementToPdfBlob, shareOnWhatsApp, triggerDownload } from "../lib/export-card";
+import { getVehicleShareUrl } from "../services/share-links";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 
 interface ResultActionsProps {
@@ -25,11 +26,16 @@ function buildShareText(data: AnalysisData) {
     riskLabel,
     data.summary,
     findings > 0 ? `${findings} finding${findings === 1 ? "" : "s"} detected.` : "",
+    getVehicleShareUrl(data),
     "",
     "Verify your RC & Insurance: https://claimcheck.co.in",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 export default function ResultActions({
@@ -40,6 +46,7 @@ export default function ResultActions({
   filenameBase = "claimcheck-report",
 }: ResultActionsProps) {
   const [busy, setBusy] = useState<"png" | "pdf" | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handlePng = async () => {
     if (!cardRef.current) return;
@@ -74,8 +81,8 @@ export default function ResultActions({
             });
             return;
           }
-        } catch (error: any) {
-          if (error?.name === "AbortError") return;
+        } catch (error: unknown) {
+          if (isAbortError(error)) return;
         }
       }
 
@@ -89,6 +96,25 @@ export default function ResultActions({
     shareOnWhatsApp(buildShareText(data));
   };
 
+  const handleCopyLink = async () => {
+    const url = getVehicleShareUrl(data);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const input = document.createElement("input");
+      input.value = url;
+      input.setAttribute("readonly", "");
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
+
   const baseBtn =
     "inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground shadow-soft transition-all hover:bg-muted hover:shadow-elevated disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -97,6 +123,10 @@ export default function ResultActions({
       <button type="button" onClick={handleShare} className={baseBtn}>
         <FiShare2 className="h-4 w-4 text-risk-green" />
         Share on WhatsApp
+      </button>
+      <button type="button" onClick={handleCopyLink} className={baseBtn}>
+        <FiLink className="h-4 w-4 text-primary" />
+        {copied ? "Link copied" : "Copy link"}
       </button>
       <button type="button" onClick={handlePng} disabled={busy !== null} className={baseBtn}>
         {busy === "png" ? (

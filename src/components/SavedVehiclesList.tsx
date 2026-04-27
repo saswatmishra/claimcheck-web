@@ -1,4 +1,4 @@
-import { FiEye, FiTrash2, FiTruck } from "react-icons/fi";
+import { FiEye, FiLink, FiTrash2, FiTruck } from "react-icons/fi";
 import RiskBadge from "./RiskBadge";
 import type { SavedVehicle } from "../hooks/use-saved-vehicles";
 import { buildRenewalReminderIcs, downloadIcs } from "../services/reminders";
@@ -9,6 +9,7 @@ interface SavedVehiclesListProps {
   onView: (vehicle: SavedVehicle) => void;
   onRemove: (id: string) => void;
   onReminderToggle: (id: string, daysBefore: number, enabled: boolean) => void;
+  onShareLink: (vehicle: SavedVehicle) => void;
 }
 
 export default function SavedVehiclesList({
@@ -16,6 +17,7 @@ export default function SavedVehiclesList({
   onView,
   onRemove,
   onReminderToggle,
+  onShareLink,
 }: SavedVehiclesListProps) {
   if (vehicles.length === 0) return null;
 
@@ -117,6 +119,14 @@ export default function SavedVehiclesList({
                 >
                   <FiEye className="h-3.5 w-3.5" />
                   View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onShareLink(v)}
+                  className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-accent"
+                >
+                  <FiLink className="h-3.5 w-3.5" />
+                  Link
                 </button>
                 <button
                   type="button"
