@@ -18,6 +18,8 @@ type DemoScenarioMeta = {
   icon: string;
   subtitle: string;
   description: string;
+  rcPreview: string[];
+  policyPreview: string[];
 };
 
 const DEMO_SCENARIOS: DemoScenarioMeta[] = [
@@ -27,6 +29,8 @@ const DEMO_SCENARIOS: DemoScenarioMeta[] = [
     icon: "🟢",
     subtitle: "All Good",
     description: "RC and policy are consistent. Policy is active.",
+    rcPreview: ["Owner: Rahul Sharma", "Vehicle: OD02AB1234"],
+    policyPreview: ["Holder: Rahul Sharma", "Vehicle: OD02AB1234", "Expiry: Active"],
   },
   {
     id: "AMBER_EXPIRED",
@@ -34,6 +38,8 @@ const DEMO_SCENARIOS: DemoScenarioMeta[] = [
     icon: "🟠",
     subtitle: "Policy Expired",
     description: "Details match, but policy appears expired.",
+    rcPreview: ["Owner: Rahul Sharma", "Vehicle: OD02AB1234"],
+    policyPreview: ["Holder: Rahul Sharma", "Vehicle: OD02AB1234", "Expiry: Expired"],
   },
   {
     id: "RED_VEHICLE_NO",
@@ -41,6 +47,8 @@ const DEMO_SCENARIOS: DemoScenarioMeta[] = [
     icon: "🔴",
     subtitle: "Vehicle No. Mismatch",
     description: "RC and policy registration number do not match.",
+    rcPreview: ["Owner: Rohit Sharma", "Vehicle: OD02AB1234"],
+    policyPreview: ["Holder: Rohit Sharma", "Vehicle: OD02AB1243", "Expiry: Active"],
   },
 ];
 
@@ -412,13 +420,31 @@ export default function Check() {
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <div className="rounded-md border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-2">
                           <p className="text-[10px] font-semibold text-slate-700">RC Preview</p>
-                          <div className="mt-1 h-10 rounded bg-slate-100" />
+                          <div className="mt-1 min-h-14 rounded bg-slate-100 p-2">
+                            {item.rcPreview.map((line) => (
+                              <p
+                                key={`${item.id}-rc-${line}`}
+                                className="truncate text-[10px] leading-4 text-slate-600"
+                              >
+                                {line}
+                              </p>
+                            ))}
+                          </div>
                         </div>
                         <div className="rounded-md border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-2">
                           <p className="text-[10px] font-semibold text-slate-700">
                             Policy Preview
                           </p>
-                          <div className="mt-1 h-10 rounded bg-slate-100" />
+                          <div className="mt-1 min-h-14 rounded bg-slate-100 p-2">
+                            {item.policyPreview.map((line) => (
+                              <p
+                                key={`${item.id}-policy-${line}`}
+                                className="truncate text-[10px] leading-4 text-slate-600"
+                              >
+                                {line}
+                              </p>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </button>
