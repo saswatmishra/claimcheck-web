@@ -1,4 +1,4 @@
-import { getAppUrl } from "../config";
+import { APP_CONFIG, getAppUrl } from "../config";
 import type { AnalysisResult } from "../types/analysis";
 
 const SHARE_VERSION = 1;
@@ -9,6 +9,15 @@ export type VehicleSharePayload = {
   regNumber?: string;
   nickname?: string;
   analysis: AnalysisResult;
+};
+
+export type SharedReport = {
+  id: string;
+  report: AnalysisResult;
+  regNumber?: string | null;
+  nickname?: string | null;
+  createdAt?: string;
+  expiresAt?: string | null;
 };
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -107,4 +116,58 @@ export function getVehicleShareUrl(
   details: { regNumber?: string; nickname?: string } = {},
 ): string {
   return getAppUrl(getVehicleSharePath(analysis, details));
+}
+
+export function getVehicleShareUrlById(id: string): string {
+  return getAppUrl(`/v/${id}`);
+}
+
+export async function createVehicleShareUrl(
+  analysis: AnalysisResult,
+  details: { regNumber?: string; nickname?: string } = {},
+): Promise<string> {
+  const res = await fetch(`${APP_CONFIG.apiBaseUrl}/shares`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      report: analysis,
+      regNumber: details.regNumber,
+      nickname: details.nickname,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Unable to create share link (${res.status}). ${text}`);
+  }
+
+  const share = (await res.json()) as Partial<SharedReport>;
+  if (!share.id || typeof share.id !== "string") {
+    throw new Error("Share API did not return an id");
+  }
+
+  return getVehicleShareUrlById(share.id);
+}
+
+export async function loadSharedReport(id: string): Promise<SharedReport | null> {
+  const res = await fetch(`${APP_CONFIG.apiBaseUrl}/shares/${encodeURIComponent(id)}`);
+
+  if (res.status === 404) return null;
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Unable to load shared report (${res.status}). ${text}`);
+  }
+
+  const share = (await res.json()) as Partial<SharedReport>;
+  if (!share.id || !isAnalysisResult(share.report)) return null;
+
+  return {
+    id: share.id,
+    report: share.report,
+    regNumber: typeof share.regNumber === "string" ? share.regNumber : null,
+    nickname: typeof share.nickname === "string" ? share.nickname : null,
+    createdAt: typeof share.createdAt === "string" ? share.createdAt : undefined,
+    expiresAt: typeof share.expiresAt === "string" ? share.expiresAt : null,
+  };
 }

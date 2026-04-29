@@ -1,9 +1,11 @@
 import { Link, useParams } from "react-router-dom";
 import { FiCopy, FiExternalLink, FiLock } from "react-icons/fi";
 import { toast } from "react-toastify";
+import { useEffect, useState } from "react";
 import AnalysisResult from "../components/AnalysisResult";
 import { loadSavedVehicles } from "../hooks/use-saved-vehicles";
 import {
+  loadSharedReport,
   parseVehicleShareId,
   type VehicleSharePayload,
 } from "../services/share-links";
@@ -41,7 +43,65 @@ async function copyCurrentUrl() {
 
 export default function VehicleShare() {
   const { id = "" } = useParams();
-  const payload = parseVehicleShareId(id) ?? findLocalVehiclePayload(id);
+  const [payload, setPayload] = useState<VehicleSharePayload | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "not-found">("loading");
+
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      const legacyPayload = parseVehicleShareId(id) ?? findLocalVehiclePayload(id);
+      if (legacyPayload) {
+        if (!active) return;
+        setPayload(legacyPayload);
+        setStatus("ready");
+        return;
+      }
+
+      try {
+        const share = await loadSharedReport(id);
+        if (!active) return;
+
+        if (!share) {
+          setPayload(null);
+          setStatus("not-found");
+          return;
+        }
+
+        setPayload({
+          v: 1,
+          createdAt: share.createdAt ?? new Date().toISOString(),
+          regNumber: share.regNumber ?? undefined,
+          nickname: share.nickname ?? undefined,
+          analysis: share.report,
+        });
+        setStatus("ready");
+      } catch {
+        if (!active) return;
+        setPayload(null);
+        setStatus("not-found");
+      }
+    }
+
+    setPayload(null);
+    setStatus("loading");
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (status === "loading") {
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
+          <div className="h-32 animate-pulse rounded-xl bg-white" />
+          <div className="mt-6 h-96 animate-pulse rounded-xl bg-white" />
+        </div>
+      </main>
+    );
+  }
 
   if (!payload) {
     return (

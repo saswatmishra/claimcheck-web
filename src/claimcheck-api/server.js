@@ -1,6 +1,9 @@
+import "./load-env.js";
 import express from "express";
 import multer from "multer";
 import cors from "cors";
+import { Database } from "./db.js";
+import { SharedReportsRepository } from "./shared-reports-repository.js";
 import { ocrBuffer } from "./ocr.js";
 import {
   extractVehicleNumber,
@@ -35,6 +38,7 @@ if (process.env.GOOGLE_CREDENTIALS_JSON) {
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
+const sharedReports = new SharedReportsRepository();
 const defaultAllowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -59,6 +63,17 @@ app.use(
 );
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+function isAnalysisReport(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    ["GREEN", "AMBER", "RED"].includes(value.risk) &&
+    typeof value.summary === "string" &&
+    Array.isArray(value.findings) &&
+    Array.isArray(value.fixes)
+  );
+}
 
 async function pdfBufferToText(buffer) {
   const data = new Uint8Array(buffer);
@@ -136,6 +151,65 @@ app.get("/", (_req, res) => {
 
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/db/healthz", async (_req, res) => {
+  try {
+    const ok = await Database.healthcheck();
+    res.json({ ok });
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      error: "Database unavailable",
+      details: String(error?.message ?? error),
+    });
+  }
+});
+
+app.post("/shares", express.json({ limit: "1mb" }), async (req, res) => {
+  try {
+    const { report, regNumber = null, nickname = null } = req.body ?? {};
+
+    if (!isAnalysisReport(report)) {
+      return res.status(400).json({ error: "Invalid report payload" });
+    }
+
+    const share = await sharedReports.create({
+      report,
+      regNumber:
+        typeof regNumber === "string" && regNumber.trim()
+          ? regNumber.trim()
+          : null,
+      nickname:
+        typeof nickname === "string" && nickname.trim() ? nickname.trim() : null,
+    });
+
+    return res.status(201).json(share);
+  } catch (error) {
+    console.error("CREATE SHARE ERROR:", error);
+    return res.status(500).json({
+      error: "Unable to create share link",
+      details: String(error?.message ?? error),
+    });
+  }
+});
+
+app.get("/shares/:id", async (req, res) => {
+  try {
+    const share = await sharedReports.findById(req.params.id);
+
+    if (!share) {
+      return res.status(404).json({ error: "Share not found" });
+    }
+
+    return res.json(share);
+  } catch (error) {
+    console.error("GET SHARE ERROR:", error);
+    return res.status(500).json({
+      error: "Unable to load share link",
+      details: String(error?.message ?? error),
+    });
+  }
 });
 
 app.post(

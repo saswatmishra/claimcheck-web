@@ -9,7 +9,7 @@ import SaveVehicleDialog from "../components/SaveVehicleDialog";
 import { APP_CONFIG } from "../config";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 import { useSavedVehicles } from "../hooks/use-saved-vehicles";
-import { getVehicleShareUrl } from "../services/share-links";
+import { createVehicleShareUrl } from "../services/share-links";
 
 type DemoScenario = "GREEN" | "AMBER_EXPIRED" | "RED_VEHICLE_NO";
 type DemoScenarioMeta = {
@@ -613,7 +613,7 @@ export default function Check() {
           onShareLink={async (vehicle) => {
             try {
               await copyText(
-                getVehicleShareUrl(vehicle.analysis, {
+                await createVehicleShareUrl(vehicle.analysis, {
                   regNumber: vehicle.regNumber,
                   nickname: vehicle.nickname,
                 }),

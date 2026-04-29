@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FiBookmark, FiDownload, FiFileText, FiLink, FiLoader, FiShare2 } from "react-icons/fi";
 import { downloadPng, elementToPdfBlob, shareOnWhatsApp, triggerDownload } from "../lib/export-card";
-import { getVehicleShareUrl } from "../services/share-links";
+import { createVehicleShareUrl } from "../services/share-links";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 
 interface ResultActionsProps {
@@ -12,7 +12,7 @@ interface ResultActionsProps {
   filenameBase?: string;
 }
 
-function buildShareText(data: AnalysisData) {
+function buildShareText(data: AnalysisData, shareUrl: string) {
   const riskLabel =
     data.risk?.toUpperCase() === "RED"
       ? "HIGH RISK"
@@ -26,7 +26,7 @@ function buildShareText(data: AnalysisData) {
     riskLabel,
     data.summary,
     findings > 0 ? `${findings} finding${findings === 1 ? "" : "s"} detected.` : "",
-    getVehicleShareUrl(data),
+    shareUrl,
     "",
     "Verify your RC & Insurance: https://claimcheck.co.in",
   ]
@@ -45,22 +45,22 @@ export default function ResultActions({
   saved,
   filenameBase = "claimcheck-report",
 }: ResultActionsProps) {
-  const [busy, setBusy] = useState<"png" | "pdf" | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [busyAction, setBusyAction] = useState<"png" | "pdf" | "link" | "share" | null>(null);
+  const [linkStatus, setLinkStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   const handlePng = async () => {
     if (!cardRef.current) return;
-    setBusy("png");
+    setBusyAction("png");
     try {
       await downloadPng(cardRef.current, `${filenameBase}.png`);
     } finally {
-      setBusy(null);
+      setBusyAction(null);
     }
   };
 
   const handlePdf = async () => {
     if (!cardRef.current) return;
-    setBusy("pdf");
+    setBusyAction("pdf");
     try {
       const filename = `${filenameBase}.pdf`;
       const blob = await elementToPdfBlob(cardRef.current);
@@ -88,31 +88,50 @@ export default function ResultActions({
 
       triggerDownload(blob, filename);
     } finally {
-      setBusy(null);
+      setBusyAction(null);
     }
   };
 
-  const handleShare = () => {
-    shareOnWhatsApp(buildShareText(data));
+  const handleShare = async () => {
+    setBusyAction("share");
+    setLinkStatus("idle");
+    try {
+      const url = await createVehicleShareUrl(data);
+      shareOnWhatsApp(buildShareText(data, url));
+    } catch {
+      setLinkStatus("failed");
+      window.setTimeout(() => setLinkStatus("idle"), 2400);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const handleCopyLink = async () => {
-    const url = getVehicleShareUrl(data);
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url);
-    } else {
-      const input = document.createElement("input");
-      input.value = url;
-      input.setAttribute("readonly", "");
-      input.style.position = "fixed";
-      input.style.opacity = "0";
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand("copy");
-      document.body.removeChild(input);
+    setBusyAction("link");
+    setLinkStatus("idle");
+    try {
+      const url = await createVehicleShareUrl(data);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const input = document.createElement("input");
+        input.value = url;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        document.body.removeChild(input);
+      }
+      setLinkStatus("copied");
+      window.setTimeout(() => setLinkStatus("idle"), 1800);
+    } catch {
+      setLinkStatus("failed");
+      window.setTimeout(() => setLinkStatus("idle"), 2400);
+    } finally {
+      setBusyAction(null);
     }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
   };
 
   const baseBtn =
@@ -120,24 +139,36 @@ export default function ResultActions({
 
   return (
     <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={handleShare} className={baseBtn}>
-        <FiShare2 className="h-4 w-4 text-risk-green" />
+      <button type="button" onClick={handleShare} disabled={busyAction !== null} className={baseBtn}>
+        {busyAction === "share" ? (
+          <FiLoader className="h-4 w-4 animate-spin" />
+        ) : (
+          <FiShare2 className="h-4 w-4 text-risk-green" />
+        )}
         Share on WhatsApp
       </button>
-      <button type="button" onClick={handleCopyLink} className={baseBtn}>
-        <FiLink className="h-4 w-4 text-primary" />
-        {copied ? "Link copied" : "Copy link"}
+      <button type="button" onClick={handleCopyLink} disabled={busyAction !== null} className={baseBtn}>
+        {busyAction === "link" ? (
+          <FiLoader className="h-4 w-4 animate-spin" />
+        ) : (
+          <FiLink className="h-4 w-4 text-primary" />
+        )}
+        {linkStatus === "copied"
+          ? "Link copied"
+          : linkStatus === "failed"
+            ? "Link failed"
+            : "Copy link"}
       </button>
-      <button type="button" onClick={handlePng} disabled={busy !== null} className={baseBtn}>
-        {busy === "png" ? (
+      <button type="button" onClick={handlePng} disabled={busyAction !== null} className={baseBtn}>
+        {busyAction === "png" ? (
           <FiLoader className="h-4 w-4 animate-spin" />
         ) : (
           <FiDownload className="h-4 w-4" />
         )}
         Download PNG
       </button>
-      <button type="button" onClick={handlePdf} disabled={busy !== null} className={baseBtn}>
-        {busy === "pdf" ? (
+      <button type="button" onClick={handlePdf} disabled={busyAction !== null} className={baseBtn}>
+        {busyAction === "pdf" ? (
           <FiLoader className="h-4 w-4 animate-spin" />
         ) : (
           <FiFileText className="h-4 w-4" />

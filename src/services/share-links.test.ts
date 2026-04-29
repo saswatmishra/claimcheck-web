@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createVehicleShareUrl,
   createVehicleShareId,
+  getVehicleShareUrlById,
+  loadSharedReport,
   getVehicleSharePath,
   parseVehicleShareId,
 } from "./share-links";
@@ -21,6 +24,10 @@ const result: AnalysisResult = {
 };
 
 describe("share-links", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("round-trips a vehicle report through a URL-safe id", () => {
     const id = createVehicleShareId(result, {
       regNumber: "MH12AB1234",
@@ -38,5 +45,68 @@ describe("share-links", () => {
 
   it("rejects invalid share ids", () => {
     expect(parseVehicleShareId("not-a-report")).toBeNull();
+  });
+
+  it("creates a short share url from the API response id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "AbC123xY" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const url = await createVehicleShareUrl(result, {
+      regNumber: "MH12AB1234",
+      nickname: "Swift",
+    });
+
+    expect(url).toBe(getVehicleShareUrlById("AbC123xY"));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/shares",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          report: result,
+          regNumber: "MH12AB1234",
+          nickname: "Swift",
+        }),
+      }),
+    );
+  });
+
+  it("loads a shared report from the API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: "AbC123xY",
+          report: result,
+          regNumber: "MH12AB1234",
+          nickname: "Swift",
+          createdAt: "2026-04-29T00:00:00.000Z",
+          expiresAt: null,
+        }),
+      }),
+    );
+
+    const share = await loadSharedReport("AbC123xY");
+
+    expect(share?.id).toBe("AbC123xY");
+    expect(share?.report.summary).toBe(result.summary);
+    expect(share?.regNumber).toBe("MH12AB1234");
+  });
+
+  it("returns null when shared report API returns 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+      }),
+    );
+
+    await expect(loadSharedReport("missing")).resolves.toBeNull();
   });
 });
