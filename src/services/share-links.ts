@@ -122,17 +122,37 @@ export function getVehicleShareUrlById(id: string): string {
   return getAppUrl(`/v/${id}`);
 }
 
+function inferRegNumber(analysis: AnalysisResult): string | undefined {
+  const regNumber =
+    analysis.extracted?.rc?.vehicleNumber ??
+    analysis.extracted?.policy?.vehicleNumber;
+
+  return regNumber?.trim() || undefined;
+}
+
+function inferNickname(analysis: AnalysisResult): string | undefined {
+  const rc = analysis.extracted?.rc;
+  const nickname =
+    rc?.makeModel ??
+    [rc?.make, rc?.model].filter(Boolean).join(" ");
+
+  return nickname?.trim() || undefined;
+}
+
 export async function createVehicleShareUrl(
   analysis: AnalysisResult,
   details: { regNumber?: string; nickname?: string } = {},
 ): Promise<string> {
+  const regNumber = details.regNumber?.trim() || inferRegNumber(analysis);
+  const nickname = details.nickname?.trim() || inferNickname(analysis);
+
   const res = await fetch(`${APP_CONFIG.apiBaseUrl}/shares`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       report: analysis,
-      regNumber: details.regNumber,
-      nickname: details.nickname,
+      regNumber,
+      nickname,
     }),
   });
 

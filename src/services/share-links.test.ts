@@ -21,6 +21,9 @@ const result: AnalysisResult = {
     },
   ],
   fixes: [{ title: "Renew soon", steps: ["Renew before expiry."] }],
+  extracted: {
+    rc: { vehicleNumber: "MH12AB1234", makeModel: "Maruti Swift" },
+  },
 };
 
 describe("share-links", () => {
@@ -69,6 +72,27 @@ describe("share-links", () => {
           report: result,
           regNumber: "MH12AB1234",
           nickname: "Swift",
+        }),
+      }),
+    );
+  });
+
+  it("infers regNumber and nickname from the report when creating a share", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "AbC123xY" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createVehicleShareUrl(result);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/shares",
+      expect.objectContaining({
+        body: JSON.stringify({
+          report: result,
+          regNumber: "MH12AB1234",
+          nickname: "Maruti Swift",
         }),
       }),
     );

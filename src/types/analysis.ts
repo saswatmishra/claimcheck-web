@@ -30,7 +30,12 @@ export type AnalysisResult = {
   documents?: DocumentStatus[];
   disclaimer?: string;
   extracted?: {
-    rc?: { vehicleNumber?: string };
+    rc?: {
+      vehicleNumber?: string;
+      makeModel?: string | null;
+      make?: string | null;
+      model?: string | null;
+    };
     policy?: {
       insurer?: string;
       policyType?: string;
