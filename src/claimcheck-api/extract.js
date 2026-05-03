@@ -152,13 +152,25 @@ export function extractExpiryDateISO(text) {
   );
   if (block) return `${block[3]}-${block[2]}-${block[1]}`;
 
-  // PRIORITY 3: Generic dd/mm/yyyy near expiry keywords
+  // PRIORITY 3: Tata AIG / common motor schedule style:
+  // "Period of Own Damage : From04-Apr-2026(...) To 03-Apr-2027(...)"
+  const periodTo = t.match(
+    /\b(?:Period\s+of\s+(?:Own\s+Damage|Third\s+Party\s+Liability|Insurance)|Policy\s+End\s+Date)\b[\s\S]{0,180}?\bTo\s*:?[\s-]*([0-3]?\d)-([A-Za-z]{3,9})-(\d{4})/i,
+  );
+  if (periodTo) {
+    const day = Number(periodTo[1]);
+    const month = monthToNumber(periodTo[2]);
+    const year = Number(periodTo[3]);
+    if (year && month && day) return `${year}-${pad2(month)}-${pad2(day)}`;
+  }
+
+  // PRIORITY 4: Generic dd/mm/yyyy near expiry keywords
   const expDMY = t.match(
     /\b(Expiry|Expires|Valid\s*Upto|Policy\s*Expiry)\b[\s:]*([0-3]\d)\/([01]\d)\/(\d{4})/i
   );
   if (expDMY) return `${expDMY[4]}-${expDMY[3]}-${expDMY[2]}`;
 
-  // PRIORITY 4: ACKO style: "Policy Expires 2024 10 August"
+  // PRIORITY 5: ACKO style: "Policy Expires 2024 10 August"
   // Captures: year, day, month
   const acko1 = t.match(
     /\bPolicy\s*Expires\b\s*[:\-]?\s*(\d{4})\s+([0-3]?\d)\s+([A-Za-z]{3,9})/i
@@ -170,7 +182,7 @@ export function extractExpiryDateISO(text) {
     if (year && month && day) return `${year}-${pad2(month)}-${pad2(day)}`;
   }
 
-  // PRIORITY 5: "Policy Expires 10 August 2024"
+  // PRIORITY 6: "Policy Expires 10 August 2024"
   const acko2 = t.match(
     /\bPolicy\s*Expires\b\s*[:\-]?\s*([0-3]?\d)\s+([A-Za-z]{3,9})\s+(\d{4})/i
   );
@@ -181,7 +193,7 @@ export function extractExpiryDateISO(text) {
     if (year && month && day) return `${year}-${pad2(month)}-${pad2(day)}`;
   }
 
-  // PRIORITY 6: "Policy Expires August 10 2024" or "Policy Expires August 10, 2024"
+  // PRIORITY 7: "Policy Expires August 10 2024" or "Policy Expires August 10, 2024"
   const acko3 = t.match(
     /\bPolicy\s*Expires\b\s*[:\-]?\s*([A-Za-z]{3,9})\s+([0-3]?\d)(?:,)?\s+(\d{4})/i
   );
@@ -275,9 +287,9 @@ export function extractPolicyNumber(text) {
   const isLikelyPolicyNo = (v) => /[0-9]/.test(v) && v.length >= 8;
 
   const linePatterns = [
-    /\bPolicy\s*\/\s*Certificate\s*(?:No\.?|Number)?\b\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
-    /\bPolicy\s*Certificate\s*(?:No\.?|Number)?\b\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
-    /\bPolicy\s*(?:No\.?|Number|#)\b\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
+    /\bPolicy\s*\/\s*Certificate\s*(?:No\.?|Number)?\.?\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
+    /\bPolicy\s*Certificate\s*(?:No\.?|Number)?\.?\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
+    /\bPolicy\s*(?:No\.?|Number|#)\.?\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
   ];
 
   const lines = t
@@ -335,13 +347,15 @@ export function extractRcOwnerName(rcText) {
     .filter(Boolean);
 
   // Find the line that contains OWNERNAME
-  const ownerLine = lines.find((l) => /OWNER\s*NAME|OWNERNAME/i.test(l));
+  const ownerLine =
+    lines.find((l) => /OWNER\s*NAME|OWNERNAME/i.test(l)) ||
+    lines.find((l) => /^NAME\s*[:\-]/i.test(l));
   if (!ownerLine) return null;
 
   // Take everything after ":" if present, else after the keyword
   let name = ownerLine.includes(":")
     ? ownerLine.split(":").slice(1).join(":").trim()
-    : ownerLine.replace(/OWNER\s*NAME|OWNERNAME/i, "").trim();
+    : ownerLine.replace(/OWNER\s*NAME|OWNERNAME|^NAME/i, "").trim();
 
   // Clean common OCR junk
   name = name
@@ -515,6 +529,7 @@ export function extractRcFuel(text) {
 export function extractRcYear(text) {
   const value = pickLineValue(text, [
     /\b(?:Mfg\.?\s*Date|Date\s+of\s+Manufacture|Manufacture\s+Year|Year\s+of\s+Mfg)\b\s*[:\-]?\s*(.+)$/i,
+    /\b(?:Regd\s+Dt|Registration\s+Date|Invoice\s+Date)\b\s*[:\-]?\s*(.+)$/i,
   ]);
   if (!value) return null;
   const y = value.match(/\b(19|20)\d{2}\b/);
@@ -531,6 +546,7 @@ export function extractRcColor(text) {
 export function extractRcChassisLast4(text) {
   const value = pickLineValue(text, [
     /\b(?:Chassis(?:\s*No\.?)?|Chassis\s*Number)\b\s*[:\-]?\s*(.+)$/i,
+    /\bCH\s*NO\b\s*[:\-]?\s*(.+)$/i,
   ]);
   return last4AlphaNum(value);
 }
@@ -538,6 +554,7 @@ export function extractRcChassisLast4(text) {
 export function extractRcEngineLast4(text) {
   const value = pickLineValue(text, [
     /\b(?:Engine(?:\s*No\.?)?|Engine\s*Number)\b\s*[:\-]?\s*(.+)$/i,
+    /\bE\s*SNO\b\s*[:\-]?\s*(.+)$/i,
   ]);
   return last4AlphaNum(value);
 }
@@ -639,6 +656,7 @@ export function extractInsurer(text) {
   if (t.includes("icici lombard")) return "ICICI Lombard";
   if (t.includes("hdfc ergo")) return "HDFC ERGO";
   if (t.includes("bajaj allianz")) return "Bajaj Allianz";
+  if (t.includes("tata aig")) return "Tata AIG";
   return "Unknown";
 }
 
