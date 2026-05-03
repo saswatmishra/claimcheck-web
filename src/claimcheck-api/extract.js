@@ -79,6 +79,25 @@ function looksLikePersonName(s) {
   return true;
 }
 
+function looksLikeRcOwnerName(s) {
+  if (!looksLikePersonName(s)) return false;
+  if (
+    /\b(?:rto|regd?|registration|vehicle|motor|car|lmv|odisha|bhubaneswar|khordha)\b/i.test(
+      s,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i.test(
+      s,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
 const STOP_WORDS = [
   "INSURED VALUE",
   "REG. NO",
@@ -370,7 +389,7 @@ export function extractRcOwnerName(rcText) {
       ? ownerLine.split(":").slice(1).join(":").trim()
       : ownerLine.replace(/OWNER\s*NAME|OWNERNAME|^NAME/i, "").trim();
     const name = cleanOwnerName(value);
-    if (name) return name;
+    if (name && looksLikeRcOwnerName(name)) return name;
   }
 
   for (let i = 0; i < lines.length; i++) {
@@ -385,7 +404,7 @@ export function extractRcOwnerName(rcText) {
 
     for (const candidate of candidates) {
       const name = cleanOwnerName(candidate);
-      if (name && looksLikePersonName(name)) return name;
+      if (name && looksLikeRcOwnerName(name)) return name;
     }
   }
 
@@ -394,7 +413,7 @@ export function extractRcOwnerName(rcText) {
     /\b(?:OWNER\s*NAME|OWNERNAME|NAME)\b\s*[:\-]?\s*([A-Z][A-Za-z.\s]{2,80}?)(?=\s+(?:S\s*\/\s*W\s*\/\s*D|Father|Address|Model|MFR|Regd|VHE\s*CL|$))/i,
   );
   const flatName = cleanOwnerName(flatMatch?.[1] || "");
-  return flatName && looksLikePersonName(flatName) ? flatName : null;
+  return flatName && looksLikeRcOwnerName(flatName) ? flatName : null;
 }
 
 function pickLineValue(text, patterns) {

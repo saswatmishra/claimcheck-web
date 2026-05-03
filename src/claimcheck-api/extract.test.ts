@@ -105,6 +105,27 @@ describe("claimcheck-api extractors", () => {
     ).toBe("BISWAJIT ACHARYA");
   });
 
+  it("rejects RTO/date fragments as RC owner names", () => {
+    expect(
+      extractRcOwnerName(`
+        REGD UPTO
+        : 04-Apr-2038
+        REGD
+        : BHUBANESWAR RTO,
+        Odisha
+        MFR
+        : KIA INDIA PRIVATE
+      `),
+    ).toBeNull();
+
+    expect(
+      extractRcOwnerName(`
+        NAME : Apr Bhubaneswar Rto
+        S/W/D : PRAFULLA CHANDRA ACHARYA
+      `),
+    ).toBeNull();
+  });
+
   it("extracts DL holder from Odisha style", () => {
     const dlText = `OR02K19990011005\n: BABA BISWANATH MISHRA\nDOB\n01/01/1980`;
     expect(extractDlHolderName(dlText)).toBe("Baba Biswanath Mishra");
