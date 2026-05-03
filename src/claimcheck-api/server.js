@@ -4,6 +4,11 @@ import multer from "multer";
 import cors from "cors";
 import { Database } from "./db.js";
 import { SharedReportsRepository } from "./shared-reports-repository.js";
+import {
+  extractDocumentFieldsAi,
+  fieldValue,
+  shouldUseAiExtraction,
+} from "./ai-extract.js";
 import { ocrBuffer } from "./ocr.js";
 import {
   extractVehicleNumber,
@@ -73,6 +78,14 @@ function isAnalysisReport(value) {
     Array.isArray(value.findings) &&
     Array.isArray(value.fixes)
   );
+}
+
+function firstValue(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (value != null && typeof value !== "string") return value;
+  }
+  return null;
 }
 
 async function pdfBufferToText(buffer) {
@@ -166,6 +179,36 @@ app.get("/db/healthz", async (_req, res) => {
   }
 });
 
+app.post(
+  "/extract-policy-ai",
+  express.json({ limit: "12mb" }),
+  async (req, res) => {
+    try {
+      const {
+        documentType = "policy",
+        ocrText = "",
+        imageBase64 = null,
+        mimeType = "image/jpeg",
+      } = req.body ?? {};
+
+      const result = await extractDocumentFieldsAi({
+        documentType,
+        ocrText,
+        imageBase64,
+        mimeType,
+      });
+
+      return res.json(result);
+    } catch (error) {
+      console.error("AI EXTRACT ERROR:", error);
+      return res.status(500).json({
+        error: "AI extraction failed",
+        details: String(error?.message ?? error),
+      });
+    }
+  },
+);
+
 app.post("/shares", express.json({ limit: "1mb" }), async (req, res) => {
   try {
     const { report, regNumber = null, nickname = null } = req.body ?? {};
@@ -239,13 +282,145 @@ app.post(
       const policyTextOk = policyText && policyText.length > 10;
 
       const rawRcOwner = extractRcOwnerName(rcText);
-      const rcOwner = rawRcOwner ? startCase(toLower(rawRcOwner)) : null;
+      let rcOwner = rawRcOwner ? startCase(toLower(rawRcOwner)) : null;
 
-      const policyHolder = extractPolicyholderName(policyText);
-      const expiryIso = extractExpiryDateISO(policyText);
-      const expiry = formatExpiry(expiryIso);
+      let policyHolder = extractPolicyholderName(policyText);
+      let expiryIso = extractExpiryDateISO(policyText);
       let renewalRisk = "Unknown";
       let renewalMessage = null;
+
+      let rcVehicleNo = extractVehicleNumber(rcText);
+      let rcMakeModel = extractRcMakeModel(rcText) || extractRcMakeModel(policyText);
+      let rcFuel = extractRcFuel(rcText) || extractRcFuel(policyText);
+      let rcYear = extractRcYear(rcText);
+      let rcColor = extractRcColor(rcText);
+      let rcChassisLast4 = extractRcChassisLast4(rcText);
+      let rcEngineLast4 = extractRcEngineLast4(rcText);
+      let policyVehicleNo = extractVehicleNumber(policyText);
+      let policyType = extractPolicyType(policyText);
+      let policyNumber = extractPolicyNumber(policyText);
+      let idv = extractPolicyIdv(policyText);
+
+      let insurer = extractInsurer(policyText);
+      let dlHolder = null;
+      let dlValidUptoIso = null;
+      if (dlProvided) {
+        dlHolder = dlText ? extractDlHolderName(dlText) : null;
+        dlValidUptoIso = dlText ? extractDlValidUptoISO(dlText) : null;
+      }
+
+      const aiExtractions = {};
+      const aiEnabled = process.env.AI_EXTRACTION_ENABLED !== "false";
+
+      if (
+        aiEnabled &&
+        shouldUseAiExtraction([rcOwner, rcVehicleNo, rcMakeModel])
+      ) {
+        try {
+          const result = await extractDocumentFieldsAi({
+            documentType: "rc",
+            ocrText: rcText,
+            file: rcFile,
+          });
+          aiExtractions.rc = result;
+          const extraction = result.extraction;
+          rcOwner = firstValue(rcOwner, fieldValue(extraction, "ownerName"));
+          rcVehicleNo = firstValue(rcVehicleNo, fieldValue(extraction, "vehicleNumber"));
+          rcMakeModel = firstValue(rcMakeModel, fieldValue(extraction, "makeModel"));
+          rcFuel = firstValue(rcFuel, fieldValue(extraction, "fuel"));
+          rcYear = firstValue(rcYear, fieldValue(extraction, "year"));
+          rcColor = firstValue(rcColor, fieldValue(extraction, "color"));
+          rcChassisLast4 = firstValue(
+            rcChassisLast4,
+            fieldValue(extraction, "chassisLast4"),
+          );
+          rcEngineLast4 = firstValue(
+            rcEngineLast4,
+            fieldValue(extraction, "engineLast4"),
+          );
+        } catch (error) {
+          aiExtractions.rc = {
+            skipped: false,
+            reason: String(error?.message ?? error),
+            extraction: null,
+          };
+        }
+      }
+
+      if (
+        aiEnabled &&
+        shouldUseAiExtraction([
+          policyHolder,
+          policyVehicleNo,
+          expiryIso,
+          policyType,
+          policyNumber,
+          idv,
+          insurer,
+        ])
+      ) {
+        try {
+          const result = await extractDocumentFieldsAi({
+            documentType: "policy",
+            ocrText: policyText,
+            file: policyFile,
+          });
+          aiExtractions.policy = result;
+          const extraction = result.extraction;
+          policyHolder = firstValue(
+            policyHolder,
+            fieldValue(extraction, "policyholderName"),
+          );
+          policyVehicleNo = firstValue(
+            policyVehicleNo,
+            fieldValue(extraction, "vehicleNumber"),
+          );
+          expiryIso = firstValue(expiryIso, fieldValue(extraction, "expiryIso"));
+          policyType = firstValue(policyType, fieldValue(extraction, "policyType"));
+          policyNumber = firstValue(
+            policyNumber,
+            fieldValue(extraction, "policyNumber"),
+          );
+          idv = firstValue(idv, fieldValue(extraction, "idv"));
+          insurer = firstValue(insurer, fieldValue(extraction, "insurer"));
+        } catch (error) {
+          aiExtractions.policy = {
+            skipped: false,
+            reason: String(error?.message ?? error),
+            extraction: null,
+          };
+        }
+      }
+
+      if (
+        aiEnabled &&
+        dlProvided &&
+        shouldUseAiExtraction([dlHolder, dlValidUptoIso])
+      ) {
+        try {
+          const result = await extractDocumentFieldsAi({
+            documentType: "dl",
+            ocrText: dlText,
+            file: dlFile,
+          });
+          aiExtractions.dl = result;
+          const extraction = result.extraction;
+          dlHolder = firstValue(dlHolder, fieldValue(extraction, "holderName"));
+          dlValidUptoIso = firstValue(
+            dlValidUptoIso,
+            fieldValue(extraction, "validUptoIso"),
+          );
+        } catch (error) {
+          aiExtractions.dl = {
+            skipped: false,
+            reason: String(error?.message ?? error),
+            extraction: null,
+          };
+        }
+      }
+
+      const expiry = formatExpiry(expiryIso);
+      const dlExpiryDate = formatExpiry(dlValidUptoIso);
 
       if (expiryIso) {
         const today = new Date();
@@ -266,28 +441,6 @@ app.post(
           renewalRisk = "GREEN";
           renewalMessage = `Policy valid for ${diffDays} more day(s).`;
         }
-      }
-
-      const rcVehicleNo = extractVehicleNumber(rcText);
-      const rcMakeModel = extractRcMakeModel(rcText) || extractRcMakeModel(policyText);
-      const rcFuel = extractRcFuel(rcText) || extractRcFuel(policyText);
-      const rcYear = extractRcYear(rcText);
-      const rcColor = extractRcColor(rcText);
-      const rcChassisLast4 = extractRcChassisLast4(rcText);
-      const rcEngineLast4 = extractRcEngineLast4(rcText);
-      const policyVehicleNo = extractVehicleNumber(policyText);
-      const policyType = extractPolicyType(policyText);
-      const policyNumber = extractPolicyNumber(policyText);
-      const idv = extractPolicyIdv(policyText);
-
-      const insurer = extractInsurer(policyText);
-      let dlHolder = null;
-      let dlValidUptoIso = null;
-      let dlExpiryDate = null;
-      if (dlProvided) {
-        dlHolder = dlText ? extractDlHolderName(dlText) : null;
-        dlValidUptoIso = dlText ? extractDlValidUptoISO(dlText) : null;
-        dlExpiryDate = formatExpiry(dlValidUptoIso);
       }
 
       const vehicleMatch =
@@ -565,6 +718,7 @@ app.post(
             policyTextLength: policyText?.length ?? 0,
             rcFileType: rcFile.mimetype,
             policyFileType: policyFile.mimetype,
+            aiExtractions,
           },
         },
         findings,
