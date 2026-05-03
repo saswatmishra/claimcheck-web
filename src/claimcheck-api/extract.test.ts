@@ -84,6 +84,27 @@ describe("claimcheck-api extractors", () => {
     expect(extractRcEngineLast4(rcText)).toBe("8335");
   });
 
+  it("extracts RC owner when OCR splits the name label and value", () => {
+    expect(
+      extractRcOwnerName(`
+        VHE CL
+        : Motor Car(LMV)
+        NAME
+        : BISWAJIT ACHARYA
+        S/W/D
+        : PRAFULLA CHANDRA ACHARYA
+      `),
+    ).toBe("BISWAJIT ACHARYA");
+
+    expect(
+      extractRcOwnerName(`
+        REG NO : OD02CH0323
+        NAME BISWAJIT ACHARYA S/W/D PRAFULLA CHANDRA ACHARYA
+        Address : PLOT NO-34/35
+      `),
+    ).toBe("BISWAJIT ACHARYA");
+  });
+
   it("extracts DL holder from Odisha style", () => {
     const dlText = `OR02K19990011005\n: BABA BISWANATH MISHRA\nDOB\n01/01/1980`;
     expect(extractDlHolderName(dlText)).toBe("Baba Biswanath Mishra");

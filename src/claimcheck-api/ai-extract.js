@@ -24,6 +24,10 @@ const FIELD_NAMES = {
   dl: ["holderName", "validUptoIso"],
 };
 
+const ALL_FIELD_NAMES = [
+  ...new Set([...FIELD_NAMES.rc, ...FIELD_NAMES.policy, ...FIELD_NAMES.dl]),
+];
+
 const EXTRACTION_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -33,11 +37,7 @@ const EXTRACTION_SCHEMA = {
       type: "object",
       additionalProperties: false,
       properties: Object.fromEntries(
-        [
-          ...FIELD_NAMES.rc,
-          ...FIELD_NAMES.policy,
-          ...FIELD_NAMES.dl,
-        ].map((name) => [
+        ALL_FIELD_NAMES.map((name) => [
           name,
           {
             type: "object",
@@ -51,11 +51,7 @@ const EXTRACTION_SCHEMA = {
           },
         ]),
       ),
-      required: [
-        ...FIELD_NAMES.rc,
-        ...FIELD_NAMES.policy,
-        ...FIELD_NAMES.dl,
-      ],
+      required: ALL_FIELD_NAMES,
     },
   },
   required: ["documentType", "fields"],
@@ -101,7 +97,7 @@ function normalizeField(value) {
 
 function normalizeExtraction(documentType, parsed) {
   const fields = {};
-  for (const name of Object.keys(EXTRACTION_SCHEMA.properties.fields.properties)) {
+  for (const name of ALL_FIELD_NAMES) {
     fields[name] = normalizeField(parsed?.fields?.[name]);
   }
 

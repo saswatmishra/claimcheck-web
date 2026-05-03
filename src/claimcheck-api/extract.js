@@ -346,30 +346,55 @@ export function extractRcOwnerName(rcText) {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  // Find the line that contains OWNERNAME
+  const cleanOwnerName = (value) => {
+    let name = (value || "")
+      .replace(/\bS\s*\/\s*W\s*\/\s*D\b[\s\S]*$/i, "")
+      .replace(/\b(?:Father|Husband|Address|Model|MFR|Regd|VHE\s*CL)\b[\s\S]*$/i, "")
+      .replace(/[^A-Za-z.\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const parts = name.split(" ");
+    if (parts.length >= 3 && parts[parts.length - 1].length === 1) {
+      name = parts.slice(0, -1).join(" ");
+    }
+
+    return name || null;
+  };
+
   const ownerLine =
     lines.find((l) => /OWNER\s*NAME|OWNERNAME/i.test(l)) ||
     lines.find((l) => /^NAME\s*[:\-]/i.test(l));
-  if (!ownerLine) return null;
-
-  // Take everything after ":" if present, else after the keyword
-  let name = ownerLine.includes(":")
-    ? ownerLine.split(":").slice(1).join(":").trim()
-    : ownerLine.replace(/OWNER\s*NAME|OWNERNAME|^NAME/i, "").trim();
-
-  // Clean common OCR junk
-  name = name
-    .replace(/[^A-Za-z.\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  // If OCR appends a single trailing letter, drop it (like "... MISHRA S")
-  const parts = name.split(" ");
-  if (parts.length >= 3 && parts[parts.length - 1].length === 1) {
-    name = parts.slice(0, -1).join(" ");
+  if (ownerLine) {
+    const value = ownerLine.includes(":")
+      ? ownerLine.split(":").slice(1).join(":").trim()
+      : ownerLine.replace(/OWNER\s*NAME|OWNERNAME|^NAME/i, "").trim();
+    const name = cleanOwnerName(value);
+    if (name) return name;
   }
 
-  return name || null;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^(?:OWNER\s*NAME|OWNERNAME|NAME)$/i.test(lines[i])) continue;
+
+    const next = lines[i + 1] || "";
+    const afterNext = lines[i + 2] || "";
+    const candidates = [
+      next.replace(/^[\s:.\-]+/, ""),
+      `${next} ${afterNext}`.replace(/^[\s:.\-]+/, ""),
+    ];
+
+    for (const candidate of candidates) {
+      const name = cleanOwnerName(candidate);
+      if (name && looksLikePersonName(name)) return name;
+    }
+  }
+
+  const flat = normalizeDate(rcText || "");
+  const flatMatch = flat.match(
+    /\b(?:OWNER\s*NAME|OWNERNAME|NAME)\b\s*[:\-]?\s*([A-Z][A-Za-z.\s]{2,80}?)(?=\s+(?:S\s*\/\s*W\s*\/\s*D|Father|Address|Model|MFR|Regd|VHE\s*CL|$))/i,
+  );
+  const flatName = cleanOwnerName(flatMatch?.[1] || "");
+  return flatName && looksLikePersonName(flatName) ? flatName : null;
 }
 
 function pickLineValue(text, patterns) {

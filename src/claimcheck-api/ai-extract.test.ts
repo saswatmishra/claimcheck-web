@@ -74,6 +74,9 @@ describe("ai-extract", () => {
     expect(request.model).toBe("gpt-4o-mini");
     expect(request.text.format.type).toBe("json_schema");
     expect(request.text.format.strict).toBe(true);
+    expect(request.text.format.schema.properties.fields.required).toEqual([
+      ...new Set(request.text.format.schema.properties.fields.required),
+    ]);
     expect(request.input[1].content).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
