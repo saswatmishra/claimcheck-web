@@ -1,5 +1,10 @@
 import { useMemo, useRef, useState } from "react";
-import { FiAlertTriangle, FiLoader, FiStar } from "react-icons/fi";
+import { track } from "@vercel/analytics";
+import {
+  FiAlertTriangle,
+  FiLoader,
+  FiStar,
+} from "react-icons/fi";
 import { toast } from "react-toastify";
 import AnalysisResult from "../components/AnalysisResult";
 import FileDropzone from "../components/FileDropzone";
@@ -266,7 +271,10 @@ async function copyText(text: string) {
 }
 
 export default function Check() {
-  const [demoMode, setDemoMode] = useState(false);
+  const startsInDemo =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("demo") === "1";
+  const [demoMode, setDemoMode] = useState(startsInDemo);
   const [dlUpload, setDlUpload] = useState(false);
   const [scenario, setScenario] = useState<DemoScenario>("GREEN");
 
@@ -275,7 +283,9 @@ export default function Check() {
   const [dlFile, setDlFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisData | null>(null);
+  const [result, setResult] = useState<AnalysisData | null>(
+    startsInDemo ? analyzeDemo("GREEN") : null,
+  );
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [savedRegNumber, setSavedRegNumber] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -292,6 +302,7 @@ export default function Check() {
     setLoading(true);
     setError(null);
     setResult(null);
+    track("real_check_started", { source: "check" });
     setSavedRegNumber(null);
 
     try {
@@ -316,6 +327,7 @@ export default function Check() {
   };
 
   const handleTryDemo = () => {
+    track("demo_started", { source: "check" });
     setDemoMode(true);
     setDlUpload(false);
     setDlFile(null);
@@ -327,10 +339,17 @@ export default function Check() {
   };
 
   const handleExitDemo = () => {
+    track("real_check_started", { source: "demo_result" });
     setDemoMode(false);
     setError(null);
     setResult(null);
     setSavedRegNumber(null);
+  };
+
+  const handleDemoScenarioChange = (next: DemoScenario) => {
+    track("demo_scenario_changed", { scenario: next });
+    setScenario(next);
+    setResult(analyzeDemo(next));
   };
 
   return (
@@ -342,8 +361,8 @@ export default function Check() {
             <span className="block text-slate-700">in seconds.</span>
           </h1>
           <p className="mt-4 text-base leading-relaxed text-slate-600">
-            Upload your Registration Certificate and Insurance Policy. We detect
-            mismatches, highlight risks, and tell you exactly how to fix them.
+            Securely upload your RC and insurance documents to run a
+            claim-readiness check.
           </p>
           <p className="mt-2 text-sm text-slate-500">
             Try demo to see how ClaimCheck works before uploading your documents.
@@ -353,7 +372,7 @@ export default function Check() {
               <button
                 type="button"
                 onClick={handleTryDemo}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
               >
                 Try Demo
               </button>
@@ -394,8 +413,7 @@ export default function Check() {
                       key={item.id}
                       type="button"
                       onClick={() => {
-                        setScenario(item.id);
-                        setResult(analyzeDemo(item.id));
+                        handleDemoScenarioChange(item.id);
                       }}
                       className={[
                         "rounded-xl border p-4 text-left transition-all",
@@ -570,12 +588,20 @@ export default function Check() {
                     ];
                     const idx = order.indexOf(scenario);
                     const next = order[(idx + 1) % order.length];
-                    setScenario(next);
-                    setResult(analyzeDemo(next));
+                    handleDemoScenarioChange(next);
                   }}
                   className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
                 >
                   Try another scenario
+                </button>
+              )}
+              {demoMode && (
+                <button
+                  type="button"
+                  onClick={handleExitDemo}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Check my real documents
                 </button>
               )}
             </div>
