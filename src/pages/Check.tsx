@@ -3,6 +3,7 @@ import { track } from "@vercel/analytics";
 import {
   FiAlertTriangle,
   FiLoader,
+  FiPlayCircle,
   FiStar,
 } from "react-icons/fi";
 import { toast } from "react-toastify";
@@ -355,28 +356,21 @@ export default function Check() {
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-6xl px-4 pb-20 pt-10 sm:px-6 sm:pt-16">
-        <section className="mx-auto mb-10 max-w-2xl text-center">
+        <section className="mx-auto mb-8 max-w-2xl text-center">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
             Verify your RC & Insurance
             <span className="block text-slate-700">in seconds.</span>
           </h1>
           <p className="mt-4 text-base leading-relaxed text-slate-600">
-            Securely upload your RC and insurance documents to run a
-            claim-readiness check.
+            Upload your RC and insurance policy to check expiry, mismatches,
+            policy type, and renewal readiness. Add DL only if you want
+            license-related checks.
           </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Try demo to see how ClaimCheck works before uploading your documents.
-          </p>
-          <div className="mt-5 flex justify-center gap-3">
-            {!demoMode ? (
-              <button
-                type="button"
-                onClick={handleTryDemo}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Try Demo
-              </button>
-            ) : (
+          {demoMode && (
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row">
+              <p className="text-sm font-medium text-slate-700">
+                Demo mode is active. No file upload is needed.
+              </p>
               <button
                 type="button"
                 onClick={handleExitDemo}
@@ -384,20 +378,29 @@ export default function Check() {
               >
                 Exit Demo
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           {!demoMode && (
             <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <label className="text-sm text-slate-700 flex items-center gap-2">
+              <label className="flex items-start gap-3 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={dlUpload}
                   onChange={(e) => setDlUpload(e.target.checked)}
+                  className="mt-1"
                 />
-                Upload DL
+                <span>
+                  <span className="font-medium text-slate-900">
+                    Add driving license (optional)
+                  </span>
+                  <span className="block text-xs leading-5 text-slate-500">
+                    Use this only when you want ClaimCheck to check DL holder
+                    and validity signals.
+                  </span>
+                </span>
               </label>
             </div>
           )}
@@ -545,6 +548,30 @@ export default function Check() {
             </div>
           </div>
         </section>
+
+        {!demoMode && !result && (
+          <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex items-start gap-3">
+              <FiPlayCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Not ready to upload documents?
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  Run a sample demo to see the report format before uploading
+                  real files.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleTryDemo}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 sm:mt-0 sm:w-auto"
+            >
+              Try Demo
+            </button>
+          </section>
+        )}
 
         {error && (
           <div className="mt-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">

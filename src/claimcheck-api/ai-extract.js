@@ -66,7 +66,11 @@ function dataUrlFromFile(file) {
 }
 
 function normalizeDocumentType(documentType) {
-  if (documentType === "rc" || documentType === "policy" || documentType === "dl") {
+  if (
+    documentType === "rc" ||
+    documentType === "policy" ||
+    documentType === "dl"
+  ) {
     return documentType;
   }
   throw new Error(`Unsupported AI extraction documentType: ${documentType}`);
@@ -207,7 +211,9 @@ export async function extractDocumentFieldsAi({
 
   if (!response.ok) {
     const details = await response.text().catch(() => "");
-    throw new Error(`OpenAI extraction failed (${response.status}). ${details}`);
+    throw new Error(
+      `OpenAI extraction failed (${response.status}). ${details}`,
+    );
   }
 
   const json = await response.json();
