@@ -3,6 +3,7 @@ import Landing from "./pages/Landing";
 import Check from "./pages/Check";
 import Result from "./pages/Result";
 import VehicleShare from "./pages/VehicleShare";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Navbar from "./components/Navbar";
 import { useEffect } from "react";
 import { ToastContainer, toast } from "react-toastify";
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/check" element={<Check />} />
           <Route path="/result" element={<Result />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/v/:id" element={<VehicleShare />} />
         </Routes>
       </BrowserRouter>

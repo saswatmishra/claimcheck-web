@@ -21,9 +21,17 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <span className="text-sm text-slate-500 hidden sm:block">
-          Insurance Claim Readiness
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="hidden text-sm text-slate-500 sm:block">
+            Insurance Claim Readiness
+          </span>
+          <Link
+            to="/privacy"
+            className="text-sm font-medium text-slate-600 hover:text-slate-950"
+          >
+            Privacy
+          </Link>
+        </div>
       </div>
     </nav>
   );
