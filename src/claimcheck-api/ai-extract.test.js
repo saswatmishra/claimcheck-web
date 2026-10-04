@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractDocumentFieldsAi,
@@ -72,6 +71,8 @@ describe("ai-extract", () => {
 
     const request = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(request.model).toBe("gpt-4o-mini");
+    expect(request.store).toBe(false);
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
     expect(request.text.format.type).toBe("json_schema");
     expect(request.text.format.strict).toBe(true);
     expect(request.text.format.schema.properties.fields.required).toEqual([
@@ -105,5 +106,21 @@ describe("ai-extract", () => {
     expect(shouldUseAiExtraction(["OD02AB1234", "Rahul Sharma"])).toBe(false);
     expect(shouldUseAiExtraction(["OD02AB1234", null])).toBe(true);
     expect(shouldUseAiExtraction([""])).toBe(true);
+    expect(shouldUseAiExtraction(["Unknown"])).toBe(true);
+  });
+
+  it("rejects impossible dates and normalizes registration numbers", () => {
+    const extraction = { fields: {
+      expiryIso: { value: "2026-02-31", confidence: "high" },
+      vehicleNumber: { value: "od 02-ab 1234", confidence: "high" },
+    } };
+    expect(fieldValue(extraction, "expiryIso")).toBeNull();
+    expect(fieldValue(extraction, "vehicleNumber")).toBe("OD02AB1234");
+  });
+
+  it("rejects incomplete AI responses", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: "incomplete", output_text: "{}" }) }));
+    await expect(extractDocumentFieldsAi({ documentType: "policy", ocrText: "text" })).rejects.toThrow("did not complete");
   });
 });

@@ -1,12 +1,10 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 import { loadLastResult } from "../services/storage";
-import { saveVehicle } from "../services/vehicles";
-import { ToastContainer, toast } from "react-toastify";
+import { useSavedVehicles } from "../hooks/use-saved-vehicles";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useRef } from "react";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 import ShareCard from "../components/ShareCard";
 import { APP_CONFIG, getAppUrl } from "../config";
 import AnalysisResult from "../components/AnalysisResult";
@@ -18,6 +16,7 @@ export default function Result() {
   const state = location.state as { result?: AnalysisData } | undefined;
   const result = state?.result ?? loadLastResult();
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const { save } = useSavedVehicles();
 
   if (!result) {
     return (
@@ -81,6 +80,7 @@ export default function Result() {
 
   async function generateCardCanvas() {
     if (!cardRef.current) return;
+    const { default: html2canvas } = await import("html2canvas");
     return html2canvas(cardRef.current, {
       scale: 3,
       backgroundColor: "#ffffff",
@@ -109,6 +109,7 @@ export default function Result() {
   }
 
   async function generateCardPdfBlob() {
+    const { jsPDF } = await import("jspdf");
     const canvas = await generateCardCanvas();
     if (!canvas) return null;
 
@@ -158,8 +159,8 @@ export default function Result() {
           });
           return;
         }
-      } catch (error: any) {
-        if (error?.name === "AbortError") return;
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === "AbortError") return;
       }
     }
 
@@ -204,8 +205,8 @@ export default function Result() {
         downloadCardBlob(blob);
         toast.info("Caption shared. Attach the downloaded result card in WhatsApp.");
         return;
-      } catch (error: any) {
-        if (error?.name === "AbortError") return;
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === "AbortError") return;
       }
     }
 
@@ -253,15 +254,19 @@ export default function Result() {
               if (vehicleNo === "Unknown") {
                 toast.error("Couldn’t detect vehicle number to save.");
               } else {
-                saveVehicle({
-                  vehicleNo,
-                  analysis: analysisResult,
-                  expiryIso,
-                  policyType,
-                  insurer,
-                  savedAt: new Date().toISOString(),
-                });
-                toast.success("Vehicle saved!");
+                try {
+                  save({
+                    regNumber: vehicleNo,
+                    nickname: "",
+                    analysis: analysisResult,
+                    expiryIso,
+                    policyType,
+                    insurer,
+                  });
+                  toast.success("Vehicle saved in this browser.");
+                } catch {
+                  toast.error("Couldn’t save in this browser. Download the report instead.");
+                }
               }
             }}
             className="border px-5 py-3 rounded-lg"
@@ -285,7 +290,6 @@ export default function Result() {
           </button>
         </div>
       </div>
-      <ToastContainer />
     </div>
   );
 }

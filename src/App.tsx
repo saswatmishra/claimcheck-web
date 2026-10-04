@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Check from "./pages/Check";
 import Result from "./pages/Result";
@@ -33,7 +33,7 @@ export default function App() {
         `Renewal reminder: ${v.regNumber} expires in ${soonest.daysBefore} day(s).`
       );
 
-      markVehicleReminded(v.id);
+      try { markVehicleReminded(v.id); } catch { /* Storage may be disabled. Keep the app usable. */ }
     }
   }, []);
 
@@ -47,6 +47,13 @@ export default function App() {
           <Route path="/result" element={<Result />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/v/:id" element={<VehicleShare />} />
+          <Route path="*" element={
+            <main className="mx-auto max-w-2xl px-6 py-16">
+              <h1 className="text-3xl font-semibold">Page not found</h1>
+              <p className="mt-3 text-slate-600">This page may have moved. You can start a new document check below.</p>
+              <Link to="/check" className="mt-6 inline-block rounded-lg bg-slate-900 px-5 py-3 font-semibold text-white">Check my documents</Link>
+            </main>
+          } />
         </Routes>
       </BrowserRouter>
       <ToastContainer />

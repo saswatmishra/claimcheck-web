@@ -1,41 +1,61 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useId, useRef, useState } from "react";
 import { FiBookmark, FiX } from "react-icons/fi";
 
 interface SaveVehicleDialogProps {
   open: boolean;
   defaultRegNumber?: string;
   onClose: () => void;
-  onSave: (data: { regNumber: string; nickname: string }) => void;
+  onSave: (data: { regNumber: string; nickname: string }) => void | boolean;
 }
 
 export default function SaveVehicleDialog({
   open,
+  ...props
+}: SaveVehicleDialogProps) {
+  return open ? <SaveVehicleForm {...props} /> : null;
+}
+
+function SaveVehicleForm({
   defaultRegNumber = "",
   onClose,
   onSave,
-}: SaveVehicleDialogProps) {
+}: Omit<SaveVehicleDialogProps, "open">) {
+  const id = useId();
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [regNumber, setRegNumber] = useState(defaultRegNumber);
   const [nickname, setNickname] = useState("");
 
-  useEffect(() => {
-    if (open) {
-      setRegNumber(defaultRegNumber);
-      setNickname("");
-    }
-  }, [open, defaultRegNumber]);
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    const previousFocus = document.activeElement;
+    dialog?.showModal();
+    return () => {
+      dialog?.close();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+    };
+  }, []);
 
-  if (!open) return null;
+  const closeDialog = () => {
+    dialogRef.current?.close();
+    onClose();
+  };
 
   const canSave = regNumber.trim().length > 0;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
-      onClick={onClose}
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={`${id}-title`}
+      onCancel={(event) => { event.preventDefault(); closeDialog(); }}
+      className="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-card p-0 backdrop:bg-black/40 backdrop:backdrop-blur-sm"
+      onClick={(event) => { if (event.target === event.currentTarget) closeDialog(); }}
     >
-      <div
+      <form
         className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSave && onSave({ regNumber: regNumber.trim(), nickname: nickname.trim() }) !== false) closeDialog();
+        }}
       >
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-2.5">
@@ -43,7 +63,7 @@ export default function SaveVehicleDialog({
               <FiBookmark className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-foreground">Save vehicle</h3>
+              <h3 id={`${id}-title`} className="text-base font-semibold text-foreground">Save vehicle</h3>
               <p className="text-xs text-muted-foreground">
                 Stored in this browser only
               </p>
@@ -51,7 +71,7 @@ export default function SaveVehicleDialog({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeDialog}
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Close"
           >
@@ -61,10 +81,11 @@ export default function SaveVehicleDialog({
 
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <label htmlFor={`${id}-reg`} className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Registration number
             </label>
             <input
+              id={`${id}-reg`}
               type="text"
               value={regNumber}
               onChange={(e) => setRegNumber(e.target.value.toUpperCase())}
@@ -74,13 +95,14 @@ export default function SaveVehicleDialog({
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <label htmlFor={`${id}-nickname`} className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Nickname{" "}
               <span className="font-normal normal-case text-muted-foreground/70">
                 (optional)
               </span>
             </label>
             <input
+              id={`${id}-nickname`}
               type="text"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
@@ -93,24 +115,20 @@ export default function SaveVehicleDialog({
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeDialog}
             className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
           >
             Cancel
           </button>
           <button
-            type="button"
+            type="submit"
             disabled={!canSave}
-            onClick={() => {
-              onSave({ regNumber: regNumber.trim(), nickname: nickname.trim() });
-              onClose();
-            }}
             className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-soft transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
           >
             Save vehicle
           </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </dialog>
   );
 }

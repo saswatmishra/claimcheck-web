@@ -47,12 +47,16 @@ export default function ResultActions({
 }: ResultActionsProps) {
   const [busyAction, setBusyAction] = useState<"png" | "pdf" | "link" | "share" | null>(null);
   const [linkStatus, setLinkStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const handlePng = async () => {
     if (!cardRef.current) return;
     setBusyAction("png");
+    setExportError(null);
     try {
       await downloadPng(cardRef.current, `${filenameBase}.png`);
+    } catch {
+      setExportError("Couldn’t create the image. Please try again, or use your browser’s print option.");
     } finally {
       setBusyAction(null);
     }
@@ -61,6 +65,7 @@ export default function ResultActions({
   const handlePdf = async () => {
     if (!cardRef.current) return;
     setBusyAction("pdf");
+    setExportError(null);
     try {
       const filename = `${filenameBase}.pdf`;
       const blob = await elementToPdfBlob(cardRef.current);
@@ -87,6 +92,8 @@ export default function ResultActions({
       }
 
       triggerDownload(blob, filename);
+    } catch {
+      setExportError("Couldn’t create the PDF. Please try again, or use your browser’s print option.");
     } finally {
       setBusyAction(null);
     }
@@ -188,6 +195,8 @@ export default function ResultActions({
         <FiBookmark className={["h-4 w-4", saved ? "text-risk-green" : "text-primary"].join(" ")} />
         {saved ? "Saved" : "Save vehicle"}
       </button>
+      <p className="w-full text-xs leading-5 text-slate-500">Share links contain the report’s extracted details and can be viewed by anyone with the link. Saved vehicles stay in this browser.</p>
+      {exportError && <p role="alert" className="w-full text-sm text-red-700">{exportError}</p>}
     </div>
   );
 }

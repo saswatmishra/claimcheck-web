@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { AnalysisData } from "../components/AnalysisResult";
 import { daysUntil } from "../utils/dateUtil";
+import { isAnalysisResult } from "../shared/report.js";
 
 export type ReminderRule = {
   daysBefore: number;
@@ -32,8 +33,8 @@ function normalize(vehicle: SavedVehicle): SavedVehicle {
   return {
     ...vehicle,
     reminders:
-      vehicle.reminders && vehicle.reminders.length > 0
-        ? vehicle.reminders
+      Array.isArray(vehicle.reminders)
+        ? vehicle.reminders.filter((rule) => rule && Number.isFinite(rule.daysBefore) && typeof rule.enabled === "boolean")
         : DEFAULT_REMINDERS.map((r) => ({ ...r })),
   };
 }
@@ -45,7 +46,9 @@ export function loadSavedVehicles(): SavedVehicle[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalize);
+    return parsed.filter((vehicle) => vehicle && typeof vehicle.id === "string" &&
+      typeof vehicle.regNumber === "string" && typeof vehicle.savedAt === "number" &&
+      isAnalysisResult(vehicle.analysis)).map(normalize);
   } catch {
     return [];
   }
@@ -94,11 +97,7 @@ export function markVehicleReminded(id: string, iso = new Date().toISOString()) 
 }
 
 export function useSavedVehicles() {
-  const [vehicles, setVehicles] = useState<SavedVehicle[]>([]);
-
-  useEffect(() => {
-    setVehicles(loadSavedVehicles());
-  }, []);
+  const [vehicles, setVehicles] = useState<SavedVehicle[]>(loadSavedVehicles);
 
   const save = useCallback((vehicle: Omit<SavedVehicle, "id" | "savedAt">) => {
     const expiryIso =
@@ -112,6 +111,7 @@ export function useSavedVehicles() {
 
     const entry: SavedVehicle = {
       ...vehicle,
+      regNumber: vehicle.regNumber.replace(/[\s-]/g, "").toUpperCase(),
       id: crypto.randomUUID(),
       savedAt: Date.now(),
       expiryIso,
@@ -119,46 +119,43 @@ export function useSavedVehicles() {
       policyType,
       reminders: DEFAULT_REMINDERS.map((r) => ({ ...r })),
     };
-    setVehicles((prev) => {
-      const existing = prev.find((v) => v.regNumber === entry.regNumber);
-      const merged: SavedVehicle = existing
-        ? {
-            ...entry,
-            id: existing.id,
-            reminders: existing.reminders ?? entry.reminders,
-            lastRemindedAt: existing.lastRemindedAt,
-          }
-        : entry;
-      const next = [merged, ...prev.filter((v) => v.regNumber !== merged.regNumber)];
-      write(next);
-      return next;
-    });
-    return entry;
+    const prev = loadSavedVehicles();
+    const existing = prev.find((v) => v.regNumber.replace(/[\s-]/g, "").toUpperCase() === entry.regNumber);
+    const merged: SavedVehicle = existing
+      ? {
+          ...entry,
+          id: existing.id,
+          reminders: existing.reminders ?? entry.reminders,
+          lastRemindedAt: existing.lastRemindedAt,
+        }
+      : entry;
+    const next = [merged, ...prev.filter((v) => v.id !== existing?.id)];
+    write(next);
+    setVehicles(next);
+    return merged;
   }, []);
 
   const remove = useCallback((id: string) => {
-    setVehicles((prev) => {
-      const next = prev.filter((v) => v.id !== id);
-      write(next);
-      return next;
-    });
+    const prev = loadSavedVehicles();
+    const next = prev.filter((v) => v.id !== id);
+    write(next);
+    setVehicles(next);
   }, []);
 
   const setReminderEnabled = useCallback(
     (id: string, daysBefore: number, enabled: boolean) => {
-      setVehicles((prev) => {
-        const next = prev.map((v) => {
-          if (v.id !== id) return v;
-          const reminders = (v.reminders ?? DEFAULT_REMINDERS).map((r) => ({ ...r }));
-          const idx = reminders.findIndex((r) => r.daysBefore === daysBefore);
-          if (idx >= 0) reminders[idx].enabled = enabled;
-          else reminders.push({ daysBefore, enabled });
-          reminders.sort((a, b) => b.daysBefore - a.daysBefore);
-          return { ...v, reminders };
-        });
-        write(next);
-        return next;
+      const prev = loadSavedVehicles();
+      const next = prev.map((v) => {
+        if (v.id !== id) return v;
+        const reminders = (v.reminders ?? DEFAULT_REMINDERS).map((r) => ({ ...r }));
+        const idx = reminders.findIndex((r) => r.daysBefore === daysBefore);
+        if (idx >= 0) reminders[idx].enabled = enabled;
+        else reminders.push({ daysBefore, enabled });
+        reminders.sort((a, b) => b.daysBefore - a.daysBefore);
+        return { ...v, reminders };
       });
+      write(next);
+      setVehicles(next);
     },
     [],
   );

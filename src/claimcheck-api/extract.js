@@ -1,3 +1,5 @@
+import { normalizeVehicleNumber, validDateISO } from "../shared/documents.js";
+
 function normalizeDate(s) {
   return (s || "")
     .replace(/\u00a0/g, " ")
@@ -98,23 +100,6 @@ function looksLikeRcOwnerName(s) {
   return true;
 }
 
-const STOP_WORDS = [
-  "INSURED VALUE",
-  "REG. NO",
-  "REG NO",
-  "POLICY STARTS",
-  "POLICY EXPIRES",
-  "POLICY NUMBER",
-  "ADDRESS",
-  "EMAIL",
-  "MOBILE",
-  "PHONE",
-  "CUSTOMER ID",
-  "IDV",
-  "₹",
-  "RS",
-];
-
 function monthToNumber(mon) {
   const m = (mon || "").toLowerCase();
   const map = {
@@ -153,12 +138,16 @@ function pad2(n) {
 // Vehicle number: common Indian formats e.g. MH12AB1234, OD02AB1234
 export function extractVehicleNumber(text) {
   const t = normalizeDate(text).toUpperCase();
-  const m = t.match(/\b([A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{3,4})\b/);
-  return m ? m[1].replace(/\s+/g, "") : null;
+  const m = t.match(/\b(?:[A-Z]{2}[\s-]?\d{1,2}[\s-]?[A-Z]{1,3}[\s-]?\d{3,4}|\d{2}[\s-]?BH[\s-]?\d{4}[\s-]?[A-Z]{1,2})\b/);
+  return normalizeVehicleNumber(m?.[0]);
 }
 
 // Expiry date: try multiple patterns, then choose the best candidate near keywords
 export function extractExpiryDateISO(text) {
+  return validDateISO(findExpiryDate(text));
+}
+
+function findExpiryDate(text) {
   const t = normalizeDate(text);
 
   // PRIORITY 1: SBI / common insurer format: "To:24/12/2026"
@@ -192,7 +181,7 @@ export function extractExpiryDateISO(text) {
   // PRIORITY 5: ACKO style: "Policy Expires 2024 10 August"
   // Captures: year, day, month
   const acko1 = t.match(
-    /\bPolicy\s*Expires\b\s*[:\-]?\s*(\d{4})\s+([0-3]?\d)\s+([A-Za-z]{3,9})/i
+    /\bPolicy\s*Expires\b\s*[:-]?\s*(\d{4})\s+([0-3]?\d)\s+([A-Za-z]{3,9})/i
   );
   if (acko1) {
     const year = Number(acko1[1]);
@@ -203,7 +192,7 @@ export function extractExpiryDateISO(text) {
 
   // PRIORITY 6: "Policy Expires 10 August 2024"
   const acko2 = t.match(
-    /\bPolicy\s*Expires\b\s*[:\-]?\s*([0-3]?\d)\s+([A-Za-z]{3,9})\s+(\d{4})/i
+    /\bPolicy\s*Expires\b\s*[:-]?\s*([0-3]?\d)\s+([A-Za-z]{3,9})\s+(\d{4})/i
   );
   if (acko2) {
     const day = Number(acko2[1]);
@@ -214,7 +203,7 @@ export function extractExpiryDateISO(text) {
 
   // PRIORITY 7: "Policy Expires August 10 2024" or "Policy Expires August 10, 2024"
   const acko3 = t.match(
-    /\bPolicy\s*Expires\b\s*[:\-]?\s*([A-Za-z]{3,9})\s+([0-3]?\d)(?:,)?\s+(\d{4})/i
+    /\bPolicy\s*Expires\b\s*[:-]?\s*([A-Za-z]{3,9})\s+([0-3]?\d)(?:,)?\s+(\d{4})/i
   );
   if (acko3) {
     const month = monthToNumber(acko3[1]);
@@ -258,7 +247,7 @@ export function extractPolicyholderName(text) {
   // 3) "Name : Mr Saswat Mishra" or "Name Mr Saswat Mishra"
   // Stop at label boundary so it doesn't absorb Address/Contact etc
   const nameInline = raw.match(
-    /\bName\b\s*[:\-]?\s*(mr|mrs|ms)?\.?\s*([A-Z][A-Za-z.\s]{2,60}?)(?=\s+(Address|Email|Contact|Phone|Customer\s*ID|Intermediary|Branch|Policy|Period|$))/i
+    /\bName\b\s*[:-]?\s*(mr|mrs|ms)?\.?\s*([A-Z][A-Za-z.\s]{2,60}?)(?=\s+(Address|Email|Contact|Phone|Customer\s*ID|Intermediary|Branch|Policy|Period|$))/i
   );
   if (nameInline?.[2]) {
     const name = clean(nameInline[2]);
@@ -267,7 +256,7 @@ export function extractPolicyholderName(text) {
 
   // 4) "Insured Name: X"
   const insured = raw.match(
-    /\bInsured\s+Name\b\s*[:\-]?\s*([A-Z][A-Za-z.\s]{2,60}?)(?=\s+(Address|Email|Contact|Phone|Customer\s*ID|Policy|Period|$))/i
+    /\bInsured\s+Name\b\s*[:-]?\s*([A-Z][A-Za-z.\s]{2,60}?)(?=\s+(Address|Email|Contact|Phone|Customer\s*ID|Policy|Period|$))/i
   );
   if (insured?.[1]) {
     const name = clean(insured[1]);
@@ -306,9 +295,9 @@ export function extractPolicyNumber(text) {
   const isLikelyPolicyNo = (v) => /[0-9]/.test(v) && v.length >= 8;
 
   const linePatterns = [
-    /\bPolicy\s*\/\s*Certificate\s*(?:No\.?|Number)?\.?\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
-    /\bPolicy\s*Certificate\s*(?:No\.?|Number)?\.?\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
-    /\bPolicy\s*(?:No\.?|Number|#)\.?\s*[:\-]?\s*([A-Za-z0-9\/\-]{8,})\b/i,
+    /\bPolicy\s*\/\s*Certificate\s*(?:No\.?|Number)?\.?\s*[:-]?\s*([A-Za-z0-9/-]{8,})\b/i,
+    /\bPolicy\s*Certificate\s*(?:No\.?|Number)?\.?\s*[:-]?\s*([A-Za-z0-9/-]{8,})\b/i,
+    /\bPolicy\s*(?:No\.?|Number|#)\.?\s*[:-]?\s*([A-Za-z0-9/-]{8,})\b/i,
   ];
 
   const lines = t
@@ -326,7 +315,7 @@ export function extractPolicyNumber(text) {
   }
 
   const docWide = t.match(
-    /\bPolicy\s*\/\s*Certificate\s*(?:No\.?|Number)?\b[\s:.\-]{0,20}([A-Za-z0-9\/\-]{8,})\b/i,
+    /\bPolicy\s*\/\s*Certificate\s*(?:No\.?|Number)?\b[\s:.-]{0,20}([A-Za-z0-9/-]{8,})\b/i,
   );
   if (docWide?.[1]) {
     const candidate = docWide[1].trim().toUpperCase();
@@ -383,7 +372,7 @@ export function extractRcOwnerName(rcText) {
 
   const ownerLine =
     lines.find((l) => /OWNER\s*NAME|OWNERNAME/i.test(l)) ||
-    lines.find((l) => /^NAME\s*[:\-]/i.test(l));
+    lines.find((l) => /^NAME\s*[:-]/i.test(l));
   if (ownerLine) {
     const value = ownerLine.includes(":")
       ? ownerLine.split(":").slice(1).join(":").trim()
@@ -398,8 +387,8 @@ export function extractRcOwnerName(rcText) {
     const next = lines[i + 1] || "";
     const afterNext = lines[i + 2] || "";
     const candidates = [
-      next.replace(/^[\s:.\-]+/, ""),
-      `${next} ${afterNext}`.replace(/^[\s:.\-]+/, ""),
+      next.replace(/^[\s:.-]+/, ""),
+      `${next} ${afterNext}`.replace(/^[\s:.-]+/, ""),
     ];
 
     for (const candidate of candidates) {
@@ -410,7 +399,7 @@ export function extractRcOwnerName(rcText) {
 
   const flat = normalizeDate(rcText || "");
   const flatMatch = flat.match(
-    /\b(?:OWNER\s*NAME|OWNERNAME|NAME)\b\s*[:\-]?\s*([A-Z][A-Za-z.\s]{2,80}?)(?=\s+(?:S\s*\/\s*W\s*\/\s*D|Father|Address|Model|MFR|Regd|VHE\s*CL|$))/i,
+    /\b(?:OWNER\s*NAME|OWNERNAME|NAME)\b\s*[:-]?\s*([A-Z][A-Za-z.\s]{2,80}?)(?=\s+(?:S\s*\/\s*W\s*\/\s*D|Father|Address|Model|MFR|Regd|VHE\s*CL|$))/i,
   );
   const flatName = cleanOwnerName(flatMatch?.[1] || "");
   return flatName && looksLikeRcOwnerName(flatName) ? flatName : null;
@@ -427,7 +416,7 @@ function pickLineValue(text, patterns) {
       const m = line.match(p);
       if (!m) continue;
       const value = (m[1] || "")
-        .replace(/^[\s:.\-]+/, "")
+        .replace(/^[\s:.-]+/, "")
         .replace(/\s+/g, " ")
         .trim();
       if (value) return value;
@@ -441,15 +430,6 @@ function last4AlphaNum(value) {
   const cleaned = value.replace(/[^A-Za-z0-9]/g, "");
   if (cleaned.length < 4) return null;
   return cleaned.slice(-4).toUpperCase();
-}
-
-function toTitleCase(value) {
-  return (value || "")
-    .toLowerCase()
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word[0].toUpperCase() + word.slice(1))
-    .join(" ");
 }
 
 function cleanMakeModel(value) {
@@ -474,7 +454,7 @@ function cleanMakeModel(value) {
     out = out.slice(makeAnchor.index).trim();
   }
 
-  out = out.replace(/[,:;\-]+$/, "").trim();
+  out = out.replace(/[,:;-]+$/, "").trim();
 
   if (out.length < 3 || out.length > 70) return null;
   if (!/[A-Za-z]/.test(out)) return null;
@@ -501,7 +481,7 @@ export function extractRcMakeModel(text) {
 
   // ACKO: "Car Hyundai i10 Variant Sportz AT"
   const ackoWithVariant = t.match(
-    /\bCar\s+([A-Za-z0-9][A-Za-z0-9 .,&\-]{2,40}?)\s+Variant\s+([A-Za-z0-9][A-Za-z0-9 .,&\-]{1,35}?)\s+(?:Hypothecation|Registration year|Engine|Reg\.?\s*Authority)/i,
+    /\bCar\s+([A-Za-z0-9][A-Za-z0-9 .,&-]{2,40}?)\s+Variant\s+([A-Za-z0-9][A-Za-z0-9 .,&-]{1,35}?)\s+(?:Hypothecation|Registration year|Engine|Reg\.?\s*Authority)/i,
   );
   if (ackoWithVariant?.[1]) {
     const mm = cleanMakeModel(`${ackoWithVariant[1]} ${ackoWithVariant[2] || ""}`);
@@ -510,7 +490,7 @@ export function extractRcMakeModel(text) {
 
   // ACKO top summary: "Car Hyundai i10 Reg. no."
   const ackoTop = t.match(
-    /\bCar\s+([A-Za-z0-9][A-Za-z0-9 .,&\-]{2,40}?)\s+Reg\.?\s*no\b/i,
+    /\bCar\s+([A-Za-z0-9][A-Za-z0-9 .,&-]{2,40}?)\s+Reg\.?\s*no\b/i,
   );
   if (ackoTop?.[1]) {
     const mm = cleanMakeModel(ackoTop[1]);
@@ -519,7 +499,7 @@ export function extractRcMakeModel(text) {
 
   // SBI table-style flattened extraction.
   const sbiTable = t.match(
-    /\b([A-Za-z][A-Za-z0-9 .,&\-]{3,50}?)\s+Seating\s+Capacity\b/i,
+    /\b([A-Za-z][A-Za-z0-9 .,&-]{3,50}?)\s+Seating\s+Capacity\b/i,
   );
   if (sbiTable?.[1]) {
     const mm = cleanMakeModel(sbiTable[1]);
@@ -527,8 +507,8 @@ export function extractRcMakeModel(text) {
   }
 
   const value = pickLineValue(text, [
-    /\b(?:Maker'?s?\s+Class|Maker|Manufacturer)\b\s*[:\-]?\s*(.+)$/i,
-    /\b(?:Model|Vehicle\s+Model)\b\s*[:\-]?\s*(.+)$/i,
+    /\b(?:Maker'?s?\s+Class|Maker|Manufacturer)\b\s*[:-]?\s*(.+)$/i,
+    /\b(?:Model|Vehicle\s+Model)\b\s*[:-]?\s*(.+)$/i,
   ]);
   return cleanMakeModel(value) || null;
 }
@@ -538,7 +518,7 @@ export function extractRcFuel(text) {
 
   // ACKO: "Engine CC/ Fuel type 1197/Petrol"
   const ackoFuel = t.match(
-    /\bEngine\s*CC\s*\/\s*Fuel\s*type\b\s*[:\-]?\s*(?:\d{3,5}\s*\/\s*)?([A-Za-z]{3,12})\b/i,
+    /\bEngine\s*CC\s*\/\s*Fuel\s*type\b\s*[:-]?\s*(?:\d{3,5}\s*\/\s*)?([A-Za-z]{3,12})\b/i,
   );
   const ackoFuelValue = normalizeFuelValue(ackoFuel?.[1] || "");
   if (ackoFuelValue) return ackoFuelValue;
@@ -558,7 +538,7 @@ export function extractRcFuel(text) {
   if (sbiFuelValue) return sbiFuelValue;
 
   const value = pickLineValue(text, [
-    /\b(?:Fuel|Fuel\s*Type)\b\s*[:\-]?\s*(.+)$/i,
+    /\b(?:Fuel|Fuel\s*Type)\b\s*[:-]?\s*(.+)$/i,
   ]);
   const directFuel = normalizeFuelValue(value || "");
   if (directFuel) return directFuel;
@@ -572,8 +552,8 @@ export function extractRcFuel(text) {
 
 export function extractRcYear(text) {
   const value = pickLineValue(text, [
-    /\b(?:Mfg\.?\s*Date|Date\s+of\s+Manufacture|Manufacture\s+Year|Year\s+of\s+Mfg)\b\s*[:\-]?\s*(.+)$/i,
-    /\b(?:Regd\s+Dt|Registration\s+Date|Invoice\s+Date)\b\s*[:\-]?\s*(.+)$/i,
+    /\b(?:Mfg\.?\s*Date|Date\s+of\s+Manufacture|Manufacture\s+Year|Year\s+of\s+Mfg)\b\s*[:-]?\s*(.+)$/i,
+    /\b(?:Regd\s+Dt|Registration\s+Date|Invoice\s+Date)\b\s*[:-]?\s*(.+)$/i,
   ]);
   if (!value) return null;
   const y = value.match(/\b(19|20)\d{2}\b/);
@@ -582,29 +562,33 @@ export function extractRcYear(text) {
 
 export function extractRcColor(text) {
   const value = pickLineValue(text, [
-    /\b(?:Colour|Color)\b\s*[:\-]?\s*(.+)$/i,
+    /\b(?:Colour|Color)\b\s*[:-]?\s*(.+)$/i,
   ]);
   return value || null;
 }
 
 export function extractRcChassisLast4(text) {
   const value = pickLineValue(text, [
-    /\b(?:Chassis(?:\s*No\.?)?|Chassis\s*Number)\b\s*[:\-]?\s*(.+)$/i,
-    /\bCH\s*NO\b\s*[:\-]?\s*(.+)$/i,
+    /\b(?:Chassis(?:\s*No\.?)?|Chassis\s*Number)\b\s*[:-]?\s*(.+)$/i,
+    /\bCH\s*NO\b\s*[:-]?\s*(.+)$/i,
   ]);
   return last4AlphaNum(value);
 }
 
 export function extractRcEngineLast4(text) {
   const value = pickLineValue(text, [
-    /\b(?:Engine(?:\s*No\.?)?|Engine\s*Number)\b\s*[:\-]?\s*(.+)$/i,
-    /\bE\s*SNO\b\s*[:\-]?\s*(.+)$/i,
+    /\b(?:Engine(?:\s*No\.?)?|Engine\s*Number)\b\s*[:-]?\s*(.+)$/i,
+    /\bE\s*SNO\b\s*[:-]?\s*(.+)$/i,
   ]);
   return last4AlphaNum(value);
 }
 
 export function extractPolicyType(text) {
   const t = (text || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  if (/\b(?:stand[-\s]?alone own[-\s]damage|own[-\s]damage only)\b/.test(t)) {
+    return "Own Damage Only";
+  }
 
   // Helper checks
   const has = (re) => re.test(t);
@@ -704,9 +688,6 @@ export function extractInsurer(text) {
   return "Unknown";
 }
 
-function normalizeDlText(text) {
-  return (text || "").replace(/\r/g, "\n").replace(/\u00a0/g, " "); // non-breaking spaces
-}
 function normalizeKeepLines(s) {
   return (s || "")
     .replace(/\u00a0/g, " ")
@@ -718,41 +699,6 @@ function normalizeFlat(s) {
   return normalizeKeepLines(s)
     .replace(/[ \t]+/g, " ")
     .trim();
-}
-
-function dlLines(text) {
-  return normalizeDlText(text)
-    .split("\n")
-    .map((l) => l.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-}
-
-function looksLikeDobOrDate(s) {
-  return /^([0-3]?\d)[\/\-]([01]?\d)[\/\-](\d{4})$/.test((s || "").trim());
-}
-
-function isLikelyNameLine(s) {
-  if (!s) return false;
-  const x = s.trim();
-
-  if (x.length < 3 || x.length > 60) return false;
-  if (/[0-9@]/.test(x)) return false;
-
-  // reject common DL keywords/noise
-  if (
-    /dl|licen|license|licence|doi|dob|valid|bg|address|form|union|state|issued|number|vehicle|class|signature/i.test(
-      x
-    )
-  )
-    return false;
-
-  // mostly letters/spaces/dots
-  if (!/^[A-Za-z.\s]+$/.test(x)) return false;
-
-  // needs at least first + last name
-  if (!x.includes(" ")) return false;
-
-  return true;
 }
 
 function startCaseName(s) {
@@ -774,7 +720,7 @@ export function extractDlHolderName(text) {
   const flat = normalizeFlat(text);
 
   const looksLikeDob = (s) =>
-    /^\s*[0-3]?\d[\/\-][01]?\d[\/\-]\d{4}\s*$/.test(s || "");
+    /^\s*[0-3]?\d[/-][01]?\d[/-]\d{4}\s*$/.test(s || "");
 
   function isLikelyNameLine(s) {
     if (!s) return false;
@@ -807,7 +753,7 @@ export function extractDlHolderName(text) {
   for (let i = 0; i < lines.length - 1; i++) {
     if (/^[A-Z]{2}\d{2}[A-Z]?\d{11,}$/i.test(lines[i].replace(/\s+/g, ""))) {
       const next = lines[i + 1];
-      const m = next.match(/^\:\s*([A-Za-z.\s]{3,60})$/);
+      const m = next.match(/^:\s*([A-Za-z.\s]{3,60})$/);
       if (m?.[1]) {
         const cand = m[1].trim();
         if (isLikelyNameLine(cand)) return startCaseName(cand);
@@ -829,7 +775,7 @@ export function extractDlHolderName(text) {
   // ✅ PRIORITY C: Inline "Name : <value>" but STOP before S/D/W (so we don't pick father name)
   // (Some PDFs have it inline)
   const mInline = flat.match(
-    /\bName\b\s*[:\-]?\s*([A-Z][A-Za-z.\s]{2,60}?)(?=\s+(S\/D\/W|S\/O|D\/O|W\/O|DOB|DOI|DL|Licence|License|$))/i
+    /\bName\b\s*[:-]?\s*([A-Z][A-Za-z.\s]{2,60}?)(?=\s+(S\/D\/W|S\/O|D\/O|W\/O|DOB|DOI|DL|Licence|License|$))/i
   );
   if (mInline?.[1]) {
     const cand = mInline[1].trim();
@@ -852,29 +798,9 @@ export function extractDlValidUptoISO(text) {
 
   // 1) Keyword based (VALID TILL / VALID UPTO) with dd/mm/yyyy or dd-mm-yyyy
   const kw = flat.match(
-    /\bValid\s*(?:Till|Upto|Up\s*to)\b\s*[:\-]?\s*([0-3]?\d)[\/\-]([01]?\d)[\/\-](\d{4})/i
+    /\b(?:Valid\s*(?:Till|Upto|Up\s*to)|Expiry(?:\s*Date)?)\b\s*[:-]?\s*([0-3]?\d)[/-]([01]?\d)[/-](\d{4})/i
   );
-  if (kw) return `${kw[3]}-${pad2(kw[2])}-${pad2(kw[1])}`;
-
-  // 2) Fallback: collect all dates and pick the latest (max)
-  const all = [...flat.matchAll(/\b([0-3]?\d)[\/\-]([01]?\d)[\/\-](\d{4})\b/g)];
-  if (!all.length) return null;
-
-  let best = null;
-  let bestTime = -Infinity;
-
-  for (const m of all) {
-    const d = Number(m[1]);
-    const mo = Number(m[2]);
-    const y = Number(m[3]);
-    if (!y || mo < 1 || mo > 12 || d < 1 || d > 31) continue;
-
-    const t = new Date(`${y}-${pad2(mo)}-${pad2(d)}T00:00:00`).getTime();
-    if (!Number.isNaN(t) && t > bestTime) {
-      bestTime = t;
-      best = `${y}-${pad2(mo)}-${pad2(d)}`;
-    }
-  }
-
-  return best;
+  if (kw) return validDateISO(`${kw[3]}-${pad2(kw[2])}-${pad2(kw[1])}`);
+  // Birth and issue dates are not evidence of license expiry.
+  return null;
 }

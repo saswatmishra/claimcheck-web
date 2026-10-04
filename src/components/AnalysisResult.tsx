@@ -1,5 +1,5 @@
 import { FiAlertOctagon, FiCheckSquare, FiTool } from "react-icons/fi";
-import { RiskBadge, severityClasses } from "./RiskBadge";
+import { RiskBadge } from "./RiskBadge";
 import type {
   Finding as FindingType,
   FixStep as FixType,
@@ -19,7 +19,7 @@ const RISK_COPY: Record<AnalysisData["risk"], { headline: string; interpretation
   AMBER: {
     headline: "Some issues may affect claim readiness",
     interpretation:
-      "Your documents are mostly usable, but one or more warning signals were detected.",
+      "Review the warnings and any details we couldn’t verify.",
   },
   RED: {
     headline: "High claim-risk signals detected",
@@ -70,8 +70,8 @@ function deriveDocuments(data: AnalysisData): DocumentStatus[] {
       status: hasDl ? "UPLOADED" : "NOT_UPLOADED",
       note: hasDl ? undefined : "Upload to verify license-related risk signals",
     },
-    { label: "Permit", status: "NOT_REQUIRED" },
-    { label: "Fitness Certificate", status: "NOT_REQUIRED" },
+    { label: "Permit", status: "NOT_CHECKED" },
+    { label: "Fitness Certificate", status: "NOT_CHECKED" },
   ];
 }
 
@@ -160,6 +160,9 @@ export function AnalysisResult({ data }: { data: AnalysisData }) {
           <span className="font-semibold">Demo Result:</span> No real documents were analyzed.
         </div>
       )}
+      {!data.isDemo && data.checkedAt && Number.isFinite(Date.parse(data.checkedAt)) && (
+        <p className="text-xs leading-5 text-slate-500">Checked on {new Date(data.checkedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}. This report is a snapshot; run a new check if your documents or coverage have changed.</p>
+      )}
 
       <section
         className={`rounded-2xl border p-6 shadow-soft sm:p-8 ${summaryCardClass(data.risk)}`}
@@ -228,7 +231,7 @@ export function AnalysisResult({ data }: { data: AnalysisData }) {
             <FiAlertOctagon className="h-4 w-4 text-primary" />
           </div>
           <h3 className="text-lg font-semibold text-slate-900">Findings</h3>
-          <span className="ml-auto text-xs text-slate-500">{findings.length} issues</span>
+          <span className="ml-auto text-xs text-slate-500">{findings.filter((finding) => finding.severity !== "GREEN").length} issues</span>
         </div>
 
         {findings.length > 0 ? (
@@ -244,7 +247,7 @@ export function AnalysisResult({ data }: { data: AnalysisData }) {
                     <h4 className="mt-1 font-medium text-slate-900">{f.title}</h4>
                   </div>
                   <span
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityClasses(f.severity)}`}
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${findingCardClass(f.severity)}`}
                   >
                     {f.severity}
                   </span>

@@ -9,7 +9,9 @@ import {
   fieldValue,
   shouldUseAiExtraction,
 } from "./ai-extract.js";
-import { ocrBuffer } from "./ocr.js";
+import { DocumentInputError, fileToText } from "./document-input.js";
+import { DOCUMENT_MIME_TYPES, MAX_FILE_BYTES, calendarDaysBetween, normalizePersonName, normalizeVehicleNumber, validDateISO } from "../shared/documents.js";
+import { isAnalysisResult } from "../shared/report.js";
 import {
   extractVehicleNumber,
   extractExpiryDateISO,
@@ -28,20 +30,10 @@ import {
   extractDlHolderName,
   extractDlValidUptoISO,
 } from "./extract.js";
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { toLower, startCase } from "lodash-es";
-import fs from "fs";
-import os from "os";
-import path from "path";
+import { pathToFileURL } from "node:url";
 
-// Create a temp credentials file on Render from the env var
-if (process.env.GOOGLE_CREDENTIALS_JSON) {
-  const keyPath = path.join(os.tmpdir(), "gcp-key.json");
-  fs.writeFileSync(keyPath, process.env.GOOGLE_CREDENTIALS_JSON, "utf8");
-  process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
-}
-
-const app = express();
+export const app = express();
 const port = Number(process.env.PORT || 3001);
 const sharedReports = new SharedReportsRepository();
 const defaultAllowedOrigins = [
@@ -62,63 +54,29 @@ app.use(
         callback(null, true);
         return;
       }
-      callback(new Error("Not allowed by CORS"));
+      callback(new DocumentInputError("This origin is not allowed.", 403));
     },
   }),
 );
 
-const upload = multer({ storage: multer.memoryStorage() });
-
-function isAnalysisReport(value) {
-  return (
-    value &&
-    typeof value === "object" &&
-    ["GREEN", "AMBER", "RED"].includes(value.risk) &&
-    typeof value.summary === "string" &&
-    Array.isArray(value.findings) &&
-    Array.isArray(value.fixes)
-  );
-}
+const upload = multer({
+  storage: multer.memoryStorage(),
+  // Busboy emits its parts-limit event upon reaching the limit, so allow the
+  // terminating boundary after three files. The files/fields limits stay strict.
+  limits: { fileSize: MAX_FILE_BYTES, files: 3, fields: 0, parts: 4 },
+  fileFilter(_req, file, callback) {
+    callback(DOCUMENT_MIME_TYPES.includes(file.mimetype)
+      ? null
+      : new DocumentInputError("Choose a PDF, JPG, PNG, or WebP file.", 400), true);
+  },
+});
 
 function firstValue(...values) {
   for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "string" && value.trim() && !/^(unknown|not checked)$/i.test(value.trim())) return value.trim();
     if (value != null && typeof value !== "string") return value;
   }
   return null;
-}
-
-async function pdfBufferToText(buffer) {
-  const data = new Uint8Array(buffer);
-
-  const doc = await pdfjs.getDocument({ data }).promise;
-
-  let full = "";
-  const maxPages = Math.min(doc.numPages, 2);
-  for (let i = 1; i <= maxPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items.map((it) => it.str).join(" ");
-    full += "\n" + pageText;
-  }
-
-  return full.trim();
-}
-
-async function fileToText(file) {
-  const mime = (file.mimetype || "").toLowerCase();
-
-  // Images -> Google Vision OCR
-  if (mime.startsWith("image/")) {
-    return await ocrBuffer(file.buffer);
-  }
-
-  // PDFs -> Extract selectable text using pdf.js (no OCR)
-  if (mime === "application/pdf") {
-    return await pdfBufferToText(file.buffer);
-  }
-
-  throw new Error(`Unsupported file type: ${file.mimetype}`);
 }
 
 function formatExpiry(iso) {
@@ -138,7 +96,7 @@ function deriveWhyThisRisk(risk, findings) {
     return "No major mismatch signals were detected from the uploaded documents on the checks currently supported by ClaimCheck.";
   }
 
-  const top = findings[0];
+  const top = findings.find((finding) => finding.severity === risk) ?? findings[0];
   if (top.code === "VEHICLE_NO_MISMATCH") {
     return "We found a mismatch between the vehicle number shown on the RC and the number shown on the insurance policy. If these documents do not refer to the same vehicle, an insurer may ask for clarification or corrected records during claim processing.";
   }
@@ -152,9 +110,7 @@ function deriveWhyThisRisk(risk, findings) {
   if (risk === "RED") {
     return "One or more critical mismatches were detected and may create problems during claim verification.";
   }
-  if (risk === "AMBER") {
-    return "One or more warning signals were detected and may affect claim readiness.";
-  }
+  if (risk === "AMBER") return top.detail;
   return "The uploaded documents look consistent on the key checks we ran.";
 }
 
@@ -170,11 +126,10 @@ app.get("/db/healthz", async (_req, res) => {
   try {
     const ok = await Database.healthcheck();
     res.json({ ok });
-  } catch (error) {
+  } catch {
     res.status(503).json({
       ok: false,
       error: "Database unavailable",
-      details: String(error?.message ?? error),
     });
   }
 });
@@ -191,6 +146,12 @@ app.post(
         mimeType = "image/jpeg",
       } = req.body ?? {};
 
+      if (!['rc', 'policy', 'dl'].includes(documentType) || typeof ocrText !== "string" ||
+          (imageBase64 !== null && typeof imageBase64 !== "string") ||
+          !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+        return res.status(400).json({ error: "Invalid document extraction request." });
+      }
+
       const result = await extractDocumentFieldsAi({
         documentType,
         ocrText,
@@ -203,7 +164,6 @@ app.post(
       console.error("AI EXTRACT ERROR:", error);
       return res.status(500).json({
         error: "AI extraction failed",
-        details: String(error?.message ?? error),
       });
     }
   },
@@ -213,7 +173,7 @@ app.post("/shares", express.json({ limit: "1mb" }), async (req, res) => {
   try {
     const { report, regNumber = null, nickname = null } = req.body ?? {};
 
-    if (!isAnalysisReport(report)) {
+    if (!isAnalysisResult(report)) {
       return res.status(400).json({ error: "Invalid report payload" });
     }
 
@@ -232,7 +192,6 @@ app.post("/shares", express.json({ limit: "1mb" }), async (req, res) => {
     console.error("CREATE SHARE ERROR:", error);
     return res.status(500).json({
       error: "Unable to create share link",
-      details: String(error?.message ?? error),
     });
   }
 });
@@ -250,7 +209,6 @@ app.get("/shares/:id", async (req, res) => {
     console.error("GET SHARE ERROR:", error);
     return res.status(500).json({
       error: "Unable to load share link",
-      details: String(error?.message ?? error),
     });
   }
 });
@@ -309,7 +267,6 @@ app.post(
         dlValidUptoIso = dlText ? extractDlValidUptoISO(dlText) : null;
       }
 
-      const aiExtractions = {};
       const aiEnabled = process.env.AI_EXTRACTION_ENABLED !== "false";
 
       if (
@@ -322,7 +279,6 @@ app.post(
             ocrText: rcText,
             file: rcFile,
           });
-          aiExtractions.rc = result;
           const extraction = result.extraction;
           rcOwner = firstValue(rcOwner, fieldValue(extraction, "ownerName"));
           rcVehicleNo = firstValue(rcVehicleNo, fieldValue(extraction, "vehicleNumber"));
@@ -338,12 +294,8 @@ app.post(
             rcEngineLast4,
             fieldValue(extraction, "engineLast4"),
           );
-        } catch (error) {
-          aiExtractions.rc = {
-            skipped: false,
-            reason: String(error?.message ?? error),
-            extraction: null,
-          };
+        } catch {
+          // Missing critical fields are explicitly reported below if the fallback fails.
         }
       }
 
@@ -365,7 +317,6 @@ app.post(
             ocrText: policyText,
             file: policyFile,
           });
-          aiExtractions.policy = result;
           const extraction = result.extraction;
           policyHolder = firstValue(
             policyHolder,
@@ -383,12 +334,8 @@ app.post(
           );
           idv = firstValue(idv, fieldValue(extraction, "idv"));
           insurer = firstValue(insurer, fieldValue(extraction, "insurer"));
-        } catch (error) {
-          aiExtractions.policy = {
-            skipped: false,
-            reason: String(error?.message ?? error),
-            extraction: null,
-          };
+        } catch {
+          // Preserve deterministic fields when the AI provider is unavailable.
         }
       }
 
@@ -403,33 +350,29 @@ app.post(
             ocrText: dlText,
             file: dlFile,
           });
-          aiExtractions.dl = result;
           const extraction = result.extraction;
           dlHolder = firstValue(dlHolder, fieldValue(extraction, "holderName"));
           dlValidUptoIso = firstValue(
             dlValidUptoIso,
             fieldValue(extraction, "validUptoIso"),
           );
-        } catch (error) {
-          aiExtractions.dl = {
-            skipped: false,
-            reason: String(error?.message ?? error),
-            extraction: null,
-          };
+        } catch {
+          // An unreadable optional license must not be treated as verified.
         }
       }
 
+      expiryIso = validDateISO(expiryIso);
+      dlValidUptoIso = validDateISO(dlValidUptoIso);
+      rcVehicleNo = normalizeVehicleNumber(rcVehicleNo);
+      policyVehicleNo = normalizeVehicleNumber(policyVehicleNo);
+      const todayIso = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(new Date());
       const expiry = formatExpiry(expiryIso);
       const dlExpiryDate = formatExpiry(dlValidUptoIso);
 
       if (expiryIso) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const expiryDate = new Date(`${expiryIso}T00:00:00`);
-        const diffDays = Math.ceil(
-          (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-        );
+        const diffDays = calendarDaysBetween(todayIso, expiryIso);
         if (diffDays < 0) {
           renewalRisk = "RED";
           renewalMessage =
@@ -476,6 +419,42 @@ app.post(
             "If using PDF, upload a text-based PDF (not scanned), or upload images instead.",
           ],
         });
+      }
+
+      const missingFields = [
+        ["RC owner name", rcOwner],
+        ["RC vehicle number", rcVehicleNo],
+        ["policyholder name", policyHolder],
+        ["policy vehicle number", policyVehicleNo],
+        ["policy expiry date", expiryIso],
+        ["policy type", firstValue(policyType)],
+        ...(dlProvided ? [["driving license holder", dlHolder], ["driving license expiry date", dlValidUptoIso]] : []),
+      ].filter(([, value]) => !firstValue(value)).map(([label]) => label);
+      if (missingFields.length) {
+        risk = "AMBER";
+        summary = "Some key details could not be verified. Review the missing fields before relying on this report.";
+        findings.push({
+          code: "MISSING_CRITICAL_FIELDS",
+          title: "Some checks could not be completed",
+          detail: `We couldn’t reliably read: ${missingFields.join(", ")}. Missing details are not a passed check.`,
+          severity: "AMBER",
+        });
+        fixes.push({
+          title: "Verify the missing details",
+          steps: ["Check the missing fields against your original documents.", "Upload a clearer copy that shows the names, registration numbers, coverage type, and validity dates, then run the check again."],
+        });
+      }
+
+      if (policyType === "Own Damage Only") {
+        risk = "AMBER";
+        summary = "The uploaded document appears to be an own-damage-only policy. Review your other coverage documents.";
+        findings.push({
+          code: "OWN_DAMAGE_ONLY_POLICY",
+          title: "Separate coverage document may be needed",
+          detail: "This document is labelled as own damage only. We have not verified a separate third-party policy.",
+          severity: "AMBER",
+        });
+        fixes.push({ title: "Review the full policy set", steps: ["Check your separate third-party policy and its validity dates with your insurer."] });
       }
 
       if (policyType === "Act Only") {
@@ -539,11 +518,11 @@ app.post(
       if (
         rcOwner &&
         policyHolder &&
-        rcOwner.toUpperCase() !== policyHolder.toUpperCase()
+        normalizePersonName(rcOwner) !== normalizePersonName(policyHolder)
       ) {
         risk = "RED";
         summary =
-          "High claim rejection risk detected (based on extracted text).";
+          "Document details differ. Check the extracted values against your originals.";
         findings.push({
           code: "OWNER_MISMATCH",
           title: "RC owner and policyholder don’t match",
@@ -563,7 +542,7 @@ app.post(
       if (vehicleMatch === "No") {
         risk = "RED";
         summary =
-          "High claim rejection risk detected (based on extracted text).";
+          "Document details differ. Check the extracted values against your originals.";
         findings.push({
           code: "VEHICLE_NO_MISMATCH",
           title: "Vehicle number mismatch",
@@ -590,8 +569,7 @@ app.post(
       }
 
       if (dlFile && dlValidUptoIso) {
-        const t = new Date(`${dlValidUptoIso}T00:00:00`).getTime();
-        if (!Number.isNaN(t) && t < Date.now()) {
+        if (calendarDaysBetween(todayIso, dlValidUptoIso) < 0) {
           risk = "RED";
           summary = "High risk: driving license appears expired.";
           findings.push({
@@ -612,8 +590,8 @@ app.post(
       }
 
       if (dlFile && dlHolder && rcOwner) {
-        const a = dlHolder.toUpperCase().replace(/\s+/g, " ").trim();
-        const b = rcOwner.toUpperCase().replace(/\s+/g, " ").trim();
+        const a = normalizePersonName(dlHolder);
+        const b = normalizePersonName(rcOwner);
 
         if (a !== b) {
           // Don’t always make RED. Use AMBER: mismatch might be spouse/parent vehicle.
@@ -670,16 +648,18 @@ app.post(
             ? undefined
             : "Upload to verify license-related risk signals",
         },
-        { label: "Permit", status: "NOT_REQUIRED" },
-        { label: "Fitness Certificate", status: "NOT_REQUIRED" },
+        { label: "Permit", status: "NOT_CHECKED", note: "Requirements depend on your vehicle and use." },
+        { label: "Fitness Certificate", status: "NOT_CHECKED", note: "Requirements depend on your vehicle and use." },
       ];
 
       const headline = headlineByRisk(risk);
+      findings.sort((a, b) => ({ RED: 0, AMBER: 1, GREEN: 2 })[a.severity] - ({ RED: 0, AMBER: 1, GREEN: 2 })[b.severity]);
       const whyThisRisk = deriveWhyThisRisk(risk, findings);
       const disclaimer =
         "ClaimCheck is a read-only document consistency check. Final claim decisions depend on insurer verification, policy terms, applicable regulations, and the facts of the incident.";
 
       return res.json({
+        checkedAt: new Date().toISOString(),
         risk,
         headline,
         summary,
@@ -718,7 +698,6 @@ app.post(
             policyTextLength: policyText?.length ?? 0,
             rcFileType: rcFile.mimetype,
             policyFileType: policyFile.mimetype,
-            aiExtractions,
           },
         },
         findings,
@@ -726,13 +705,31 @@ app.post(
         disclaimer,
       });
     } catch (e) {
+      if (e instanceof DocumentInputError) return res.status(e.status).json({ error: e.message });
       console.error("ANALYZE ERROR:", e);
       return res.status(500).json({
-        error: "Analyze failed",
-        details: String(e?.message ?? e),
+        error: "We couldn’t finish reading your documents. Please try again in a moment.",
       });
     }
   },
 );
 
-app.listen(port, () => console.log(`API running on port ${port}`));
+// Keep errors from upload middleware consistent with the JSON API.
+app.use((error, _req, res, _next) => {
+  if (error instanceof multer.MulterError) {
+    return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({
+      error: error.code === "LIMIT_FILE_SIZE"
+        ? "Each document must be 8 MB or smaller. Choose a smaller file and try again."
+        : "Upload one RC, one policy, and optionally one driving license file.",
+    });
+  }
+  if (error instanceof DocumentInputError) return res.status(error.status).json({ error: error.message });
+  if (error.type === "entity.too.large") return res.status(413).json({ error: "This request is too large." });
+  if (error.type === "entity.parse.failed") return res.status(400).json({ error: "Invalid JSON request." });
+  console.error("REQUEST ERROR:", error);
+  return res.status(500).json({ error: "The request could not be completed. Please try again." });
+});
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  app.listen(port, () => console.log(`API running on port ${port}`));
+}

@@ -14,11 +14,12 @@ export type FixStep = {
 
 export type DocumentStatus = {
   label: string;
-  status: "UPLOADED" | "NOT_UPLOADED" | "NOT_REQUIRED";
+  status: "UPLOADED" | "NOT_UPLOADED" | "NOT_REQUIRED" | "NOT_CHECKED";
   note?: string;
 };
 
 export type AnalysisResult = {
+  checkedAt?: string;
   isDemo?: boolean;
   risk: RiskLevel;
   headline?: string;

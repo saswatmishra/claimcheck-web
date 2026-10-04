@@ -30,5 +30,11 @@ describe("dateUtil", () => {
   it("returns null for invalid or empty date", () => {
     expect(daysUntil("invalid-date")).toBeNull();
     expect(daysUntil(null)).toBeNull();
+    expect(daysUntil("2026-02-31")).toBeNull();
+  });
+
+  it("counts calendar days across daylight-saving changes", () => {
+    vi.setSystemTime(new Date(2026, 2, 7, 12, 0, 0));
+    expect(daysUntil("2026-03-09")).toBe(2);
   });
 });

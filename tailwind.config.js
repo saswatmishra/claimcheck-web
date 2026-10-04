@@ -1,6 +1,6 @@
 export default {
   darkMode: ["class"],
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  content: ["./index.html", "./src/**/*.{ts,tsx}", "!./src/**/node_modules/**"],
   theme: {
     extend: {
       borderRadius: {

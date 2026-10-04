@@ -42,7 +42,7 @@ describe("storage service", () => {
     saveLastResult(withRaw);
     const raw = localStorage.getItem(STORAGE_KEY);
     expect(raw).toBeTruthy();
-    const parsed = JSON.parse(raw as string) as any;
+    const parsed = JSON.parse(raw as string);
     expect(parsed.extracted?.rc?.rawText).toBeUndefined();
     expect(parsed.extracted?.policy?.rawText).toBeUndefined();
   });

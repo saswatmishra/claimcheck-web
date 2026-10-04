@@ -1,14 +1,18 @@
 import type { AnalysisResult } from "../types/analysis";
+import { isAnalysisResult } from "../shared/report.js";
 
 const KEY = "claimcheck:lastResult";
 
 function slimForStorage(result: AnalysisResult): AnalysisResult {
   // Deep clone, then remove big fields if present
-  const copy: any = structuredClone(result);
+  const copy = structuredClone(result) as AnalysisResult & {
+    extracted?: { rc?: { rawText?: string }; policy?: { rawText?: string }; meta?: unknown };
+  };
 
   // If you have extracted/rawText in result, remove it
   if (copy.extracted?.rc?.rawText) delete copy.extracted.rc.rawText;
   if (copy.extracted?.policy?.rawText) delete copy.extracted.policy.rawText;
+  if (copy.extracted) delete copy.extracted.meta;
 
   // If extracted exists but is still heavy, you can also drop extracted entirely:
   // delete copy.extracted;
@@ -30,7 +34,8 @@ export function loadLastResult(): AnalysisResult | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as AnalysisResult;
+    const parsed: unknown = JSON.parse(raw);
+    return isAnalysisResult(parsed) ? parsed : null;
   } catch {
     return null;
   }

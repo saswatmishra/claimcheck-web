@@ -1,5 +1,6 @@
 import { APP_CONFIG, getAppUrl } from "../config";
 import type { AnalysisResult } from "../types/analysis";
+import { isAnalysisResult } from "../shared/report.js";
 
 const SHARE_VERSION = 1;
 
@@ -51,19 +52,6 @@ function fromBase64Url(value: string): string {
   const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
   const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
   return new TextDecoder().decode(base64ToBytes(padded));
-}
-
-function isAnalysisResult(value: unknown): value is AnalysisResult {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<AnalysisResult>;
-  return (
-    (candidate.risk === "GREEN" ||
-      candidate.risk === "AMBER" ||
-      candidate.risk === "RED") &&
-    typeof candidate.summary === "string" &&
-    Array.isArray(candidate.findings) &&
-    Array.isArray(candidate.fixes)
-  );
 }
 
 export function createVehicleShareId(
@@ -148,6 +136,7 @@ export async function createVehicleShareUrl(
 
   const res = await fetch(`${APP_CONFIG.apiBaseUrl}/shares`, {
     method: "POST",
+    signal: AbortSignal.timeout(20000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       report: analysis,
@@ -170,7 +159,7 @@ export async function createVehicleShareUrl(
 }
 
 export async function loadSharedReport(id: string): Promise<SharedReport | null> {
-  const res = await fetch(`${APP_CONFIG.apiBaseUrl}/shares/${encodeURIComponent(id)}`);
+  const res = await fetch(`${APP_CONFIG.apiBaseUrl}/shares/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(20000) });
 
   if (res.status === 404) return null;
 

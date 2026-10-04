@@ -36,6 +36,7 @@ describe("claimcheck-api extractors", () => {
   it("extracts policy type reliably", () => {
     expect(extractPolicyType("Private Car Comprehensive Plan")).toBe("Comprehensive");
     expect(extractPolicyType("Third Party Only Liability Policy")).toBe("Act Only");
+    expect(extractPolicyType("ICICI Lombard Standalone Own Damage Policy")).toBe("Own Damage Only");
   });
 
   it("extracts insurer reliably", () => {
@@ -131,10 +132,21 @@ describe("claimcheck-api extractors", () => {
     expect(extractDlHolderName(dlText)).toBe("Baba Biswanath Mishra");
   });
 
-  it("extracts DL validity date with keyword and fallback latest date", () => {
+  it("extracts DL validity only from labelled expiry dates", () => {
     expect(extractDlValidUptoISO("Valid Upto: 24/12/2030")).toBe("2030-12-24");
     expect(
       extractDlValidUptoISO("DOB 01/01/1985 Issued 01/01/2020 Expiry 05/08/2035"),
     ).toBe("2035-08-05");
+    expect(extractDlValidUptoISO("DOB 01/01/1985 Issued 01/01/2020")).toBeNull();
+    expect(extractDlValidUptoISO("Valid Upto: 31/02/2030")).toBeNull();
+  });
+
+  it("rejects impossible policy dates", () => {
+    expect(extractExpiryDateISO("To:31/02/2026")).toBeNull();
+  });
+
+  it("handles hyphenated and BH registrations", () => {
+    expect(extractVehicleNumber("Reg No: OD-02-AB-1234")).toBe("OD02AB1234");
+    expect(extractVehicleNumber("Reg No: 22 BH 1234 AA")).toBe("22BH1234AA");
   });
 });

@@ -43,8 +43,13 @@ async function copyCurrentUrl() {
 
 export default function VehicleShare() {
   const { id = "" } = useParams();
+  return <SharedReportView key={id} id={id} />;
+}
+
+function SharedReportView({ id }: { id: string }) {
   const [payload, setPayload] = useState<VehicleSharePayload | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "not-found">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "not-found" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -79,18 +84,16 @@ export default function VehicleShare() {
       } catch {
         if (!active) return;
         setPayload(null);
-        setStatus("not-found");
+        setStatus("error");
       }
     }
 
-    setPayload(null);
-    setStatus("loading");
     void load();
 
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, attempt]);
 
   if (status === "loading") {
     return (
@@ -109,12 +112,17 @@ export default function VehicleShare() {
         <div className="mx-auto max-w-2xl px-6 py-12">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h1 className="text-2xl font-semibold text-slate-900">
-              Report link not found
+              {status === "error" ? "We couldn’t load this report" : "Report link not found"}
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              This share link is invalid, incomplete, or only exists in another
-              browser.
+              {status === "error"
+                ? "Check your connection and try again. The report service may be temporarily unavailable."
+                : "This share link may have expired, be incomplete, or only exist in another browser."}
             </p>
+            {status === "error" && (
+              <button type="button" onClick={() => { setStatus("loading"); setAttempt((value) => value + 1); }}
+                className="mt-4 mr-3 rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold">Try again</button>
+            )}
             <Link
               to="/check"
               className="mt-6 inline-flex items-center justify-center rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import { ShareIdGenerator } from "./share-id-generator.js";
 

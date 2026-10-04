@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { track } from "@vercel/analytics";
 import {
   FiAlertTriangle,
@@ -12,12 +12,12 @@ import FileDropzone from "../components/FileDropzone";
 import ResultActions from "../components/ResultActions";
 import SavedVehiclesList from "../components/SavedVehiclesList";
 import SaveVehicleDialog from "../components/SaveVehicleDialog";
-import { APP_CONFIG } from "../config";
+import { analyzeDocuments } from "../services/analyze";
 import type { AnalysisResult as AnalysisData } from "../types/analysis";
 import { useSavedVehicles } from "../hooks/use-saved-vehicles";
 import { createVehicleShareUrl } from "../services/share-links";
 
-type DemoScenario = "GREEN" | "AMBER_EXPIRED" | "RED_VEHICLE_NO";
+type DemoScenario = "GREEN" | "RED_EXPIRED" | "RED_VEHICLE_NO";
 type DemoScenarioMeta = {
   id: DemoScenario;
   label: string;
@@ -31,7 +31,7 @@ type DemoScenarioMeta = {
 const DEMO_SCENARIOS: DemoScenarioMeta[] = [
   {
     id: "GREEN",
-    label: "Safe",
+    label: "Details Match",
     icon: "🟢",
     subtitle: "All Good",
     description: "RC and policy are consistent. Policy is active.",
@@ -39,9 +39,9 @@ const DEMO_SCENARIOS: DemoScenarioMeta[] = [
     policyPreview: ["Holder: Rahul Sharma", "Vehicle: OD02AB1234", "Expiry: Active"],
   },
   {
-    id: "AMBER_EXPIRED",
-    label: "Needs Attention",
-    icon: "🟠",
+    id: "RED_EXPIRED",
+    label: "Policy Expired",
+    icon: "🔴",
     subtitle: "Policy Expired",
     description: "Details match, but policy appears expired.",
     rcPreview: ["Owner: Rahul Sharma", "Vehicle: OD02AB1234"],
@@ -57,29 +57,6 @@ const DEMO_SCENARIOS: DemoScenarioMeta[] = [
     policyPreview: ["Holder: Rohit Sharma", "Vehicle: OD02AB1243", "Expiry: Active"],
   },
 ];
-
-async function analyzeViaApi(
-  rcFile: File,
-  policyFile: File,
-  dlFile?: File | null,
-): Promise<AnalysisData> {
-  const formData = new FormData();
-  formData.append("rc", rcFile);
-  formData.append("policy", policyFile);
-  if (dlFile) formData.append("dl", dlFile);
-
-  const res = await fetch(`${APP_CONFIG.apiBaseUrl}/analyze`, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`Analysis failed (${res.status}). ${txt}`);
-  }
-
-  return (await res.json()) as AnalysisData;
-}
 
 function analyzeDemo(scenario: DemoScenario): AnalysisData {
   if (scenario === "GREEN") {
@@ -133,11 +110,11 @@ function analyzeDemo(scenario: DemoScenario): AnalysisData {
     };
   }
 
-  if (scenario === "AMBER_EXPIRED") {
+  if (scenario === "RED_EXPIRED") {
     return {
       isDemo: true,
-      risk: "AMBER",
-      headline: "Some issues may affect claim readiness",
+      risk: "RED",
+      headline: "High claim-risk signals detected",
       summary: "Your policy appears to be expired. This may affect claim eligibility.",
       whyThisRisk:
         "The document details are mostly consistent, but the policy appears expired in this demo scenario. That can reduce claim readiness unless renewal is completed.",
@@ -175,7 +152,7 @@ function analyzeDemo(scenario: DemoScenario): AnalysisData {
           code: "POLICY_EXPIRED",
           title: "Policy expired",
           detail: "Policy appears expired and may affect claim eligibility.",
-          severity: "AMBER",
+          severity: "RED",
         },
       ],
       fixes: [
@@ -290,7 +267,29 @@ export default function Check() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [savedRegNumber, setSavedRegNumber] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const resultRef = useRef<HTMLElement | null>(null);
+  const activeRequest = useRef<AbortController | null>(null);
   const { vehicles, save, remove, setReminderEnabled } = useSavedVehicles();
+
+  useEffect(() => () => {
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (result) resultRef.current?.focus();
+  }, [result]);
+
+  const clearReport = () => {
+    setResult(null);
+    setError(null);
+    setSavedRegNumber(null);
+  };
+
+  const changeFile = (setFile: (file: File | null) => void) => (file: File | null) => {
+    setFile(file);
+    clearReport();
+  };
 
   const canAnalyze = !loading && !!rcFile && !!policyFile;
   const defaultReg = useMemo(() => (result ? extractRegNumber(result) : ""), [result]);
@@ -299,7 +298,10 @@ export default function Check() {
     : "claimcheck-report";
 
   const handleAnalyze = async () => {
-    if (!rcFile || !policyFile) return;
+    if (!rcFile || !policyFile || activeRequest.current) return;
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const timeout = window.setTimeout(() => controller.abort("timeout"), 120000);
     setLoading(true);
     setError(null);
     setResult(null);
@@ -307,15 +309,28 @@ export default function Check() {
     setSavedRegNumber(null);
 
     try {
-      const data = await analyzeViaApi(rcFile, policyFile, dlFile);
-      setResult(data);
+      const data = await analyzeDocuments(rcFile, policyFile, dlUpload ? dlFile : null, controller.signal);
+      if (!controller.signal.aborted) setResult(data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Something went wrong. Please try again.",
-      );
+      if (activeRequest.current === controller) {
+        setError(controller.signal.reason === "timeout"
+          ? "This check took too long. Your files are still selected. Try again in a moment."
+          : err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      }
     } finally {
-      setLoading(false);
+      window.clearTimeout(timeout);
+      if (activeRequest.current === controller) {
+        activeRequest.current = null;
+        setLoading(false);
+      }
     }
+  };
+
+  const handleCancel = () => {
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    setLoading(false);
+    setError(null);
   };
 
   const handleReset = () => {
@@ -359,7 +374,7 @@ export default function Check() {
         <section className="mx-auto mb-8 max-w-2xl text-center">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
             Verify your RC & Insurance
-            <span className="block text-slate-700">in seconds.</span>
+            <span className="block text-slate-700">before you need a claim.</span>
           </h1>
           <p className="mt-4 text-base leading-relaxed text-slate-600">
             Upload your RC and insurance policy to check expiry, mismatches,
@@ -389,7 +404,12 @@ export default function Check() {
                 <input
                   type="checkbox"
                   checked={dlUpload}
-                  onChange={(e) => setDlUpload(e.target.checked)}
+                  disabled={loading}
+                  onChange={(e) => {
+                    setDlUpload(e.target.checked);
+                    if (!e.target.checked) setDlFile(null);
+                    clearReport();
+                  }}
                   className="mt-1"
                 />
                 <span>
@@ -484,13 +504,15 @@ export default function Check() {
                 label="Registration Certificate (RC)"
                 description="Vehicle registration document issued by RTO"
                 file={rcFile}
-                onFileChange={setRcFile}
+                onFileChange={changeFile(setRcFile)}
+                disabled={loading}
               />
               <FileDropzone
                 label="Insurance Policy"
-                description="Active insurance policy document"
+                description="Include the policyholder, vehicle number, coverage and validity dates"
                 file={policyFile}
-                onFileChange={setPolicyFile}
+                onFileChange={changeFile(setPolicyFile)}
+                disabled={loading}
               />
               {dlUpload && (
                 <div className="sm:col-span-2">
@@ -498,13 +520,20 @@ export default function Check() {
                     label="Driving License (Optional)"
                     description="Upload DL photo/PDF for mismatch checks"
                     file={dlFile}
-                    onFileChange={setDlFile}
+                    onFileChange={changeFile(setDlFile)}
+                    disabled={loading}
                   />
                 </div>
               )}
             </div>
           )}
 
+          {!demoMode && (
+            <p className="mt-4 text-xs leading-5 text-slate-600">
+              Use clear photos or PDFs with selectable text (up to 30 pages). For scanned or password-protected PDFs, upload a clear photo instead.
+              Files are sent for document processing; image reading and AI extraction may use Google Cloud Vision and OpenAI. <a href="/privacy" className="underline">How your data is handled</a>.
+            </p>
+          )}
           <div className="mt-6 flex flex-col items-stretch gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">
               {demoMode
@@ -549,7 +578,7 @@ export default function Check() {
           </div>
         </section>
 
-        {!demoMode && !result && (
+        {!demoMode && !result && !loading && (
           <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4">
             <div className="flex items-start gap-3">
               <FiPlayCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
@@ -574,7 +603,7 @@ export default function Check() {
         )}
 
         {error && (
-          <div className="mt-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div role="alert" className="mt-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             <FiAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
               <p className="font-semibold">Unable to analyze</p>
@@ -585,6 +614,10 @@ export default function Check() {
 
         {loading && (
           <div className="mt-8 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+              <p role="status" className="text-sm text-slate-700">Reading your documents and comparing details. This can take up to two minutes.</p>
+              <button type="button" onClick={handleCancel} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Cancel check</button>
+            </div>
             <div className="h-32 animate-pulse rounded-2xl bg-white" />
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="h-64 animate-pulse rounded-2xl bg-white" />
@@ -594,7 +627,7 @@ export default function Check() {
         )}
 
         {result && !loading && (
-          <section className="mt-10">
+          <section ref={resultRef} tabIndex={-1} aria-label="Your document check results" className="mt-10 scroll-mt-6 focus:outline-none">
             <div className="mb-4 flex flex-wrap gap-2">
               {!demoMode ? (
                 <button
@@ -610,7 +643,7 @@ export default function Check() {
                   onClick={() => {
                     const order: DemoScenario[] = [
                       "GREEN",
-                      "AMBER_EXPIRED",
+                      "RED_EXPIRED",
                       "RED_VEHICLE_NO",
                     ];
                     const idx = order.indexOf(scenario);
@@ -652,17 +685,24 @@ export default function Check() {
         <SavedVehiclesList
           vehicles={vehicles}
           onView={(vehicle) => {
+            handleCancel();
+            setDemoMode(!!vehicle.analysis.isDemo);
             setResult(vehicle.analysis);
             setSavedRegNumber(vehicle.regNumber);
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
           onRemove={(id) => {
-            remove(id);
-            toast.success("Saved vehicle removed.");
+            try {
+              remove(id);
+              toast.success("Saved vehicle removed.");
+            } catch {
+              toast.error("Couldn’t update browser storage. Please try again.");
+            }
           }}
-          onReminderToggle={(id, daysBefore, enabled) =>
-            setReminderEnabled(id, daysBefore, enabled)
-          }
+          onReminderToggle={(id, daysBefore, enabled) => {
+            try { setReminderEnabled(id, daysBefore, enabled); }
+            catch { toast.error("Couldn’t save the reminder setting in this browser."); }
+          }}
           onShareLink={async (vehicle) => {
             try {
               await copyText(
@@ -686,13 +726,17 @@ export default function Check() {
         onSave={({ regNumber, nickname }) => {
           if (!result) {
             toast.error("No analysis result to save.");
-            return;
+            return false;
           }
 
-          save({ regNumber, nickname, analysis: result });
-
-          setSavedRegNumber(regNumber);
-          toast.success("Vehicle saved!");
+          try {
+            const saved = save({ regNumber, nickname, analysis: result });
+            setSavedRegNumber(saved.regNumber);
+            toast.success("Vehicle saved in this browser.");
+          } catch {
+            toast.error("Couldn’t save in this browser. Check that browser storage is available, or download the report.");
+            return false;
+          }
         }}
       />
     </div>

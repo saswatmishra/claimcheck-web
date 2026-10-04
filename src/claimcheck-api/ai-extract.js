@@ -1,3 +1,5 @@
+import { normalizeVehicleNumber, validDateISO } from "../shared/documents.js";
+
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-4o-mini";
 
@@ -108,7 +110,6 @@ function normalizeExtraction(documentType, parsed) {
   return {
     documentType,
     fields,
-    raw: parsed,
   };
 }
 
@@ -128,7 +129,7 @@ function getOutputText(response) {
 
 export function shouldUseAiExtraction(requiredValues) {
   return requiredValues.some((value) => {
-    if (typeof value === "string") return value.trim().length === 0;
+    if (typeof value === "string") return !value.trim() || /^(unknown|not checked)$/i.test(value.trim());
     return value == null;
   });
 }
@@ -181,12 +182,14 @@ export async function extractDocumentFieldsAi({
 
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(25000),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model: process.env.OPENAI_VISION_MODEL || DEFAULT_MODEL,
+      store: false,
       input: [
         {
           role: "system",
@@ -210,15 +213,18 @@ export async function extractDocumentFieldsAi({
   });
 
   if (!response.ok) {
-    const details = await response.text().catch(() => "");
-    throw new Error(
-      `OpenAI extraction failed (${response.status}). ${details}`,
-    );
+    throw new Error(`AI extraction unavailable (${response.status}).`);
   }
 
   const json = await response.json();
+  if (json.status && json.status !== "completed") {
+    throw new Error("AI extraction did not complete.");
+  }
   const text = getOutputText(json);
   const parsed = text ? JSON.parse(text) : null;
+  if (!parsed?.fields || parsed.documentType !== normalizedType) {
+    throw new Error("AI extraction did not return the requested document fields.");
+  }
 
   return {
     skipped: false,
@@ -229,6 +235,9 @@ export async function extractDocumentFieldsAi({
 
 export function fieldValue(extraction, name) {
   const field = extraction?.fields?.[name];
-  if (!field || field.confidence === "low") return null;
-  return field.value;
+  if (!field || !["high", "medium"].includes(field.confidence)) return null;
+  if (typeof field.value !== "string" || !field.value.trim()) return null;
+  if (name === "expiryIso" || name === "validUptoIso") return validDateISO(field.value);
+  if (name === "vehicleNumber") return normalizeVehicleNumber(field.value);
+  return field.value.trim();
 }

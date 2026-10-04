@@ -26,8 +26,8 @@ export default function ShareCard({ result }: { result: AnalysisResult }) {
   const meta = riskMeta(risk);
 
   const vehicleNo =
-    (result?.extracted as any)?.rc?.vehicleNumber ||
-    (result?.extracted as any)?.policy?.vehicleNumber ||
+    result.extracted?.rc?.vehicleNumber ||
+    result.extracted?.policy?.vehicleNumber ||
     "Unknown";
 
   const reason =

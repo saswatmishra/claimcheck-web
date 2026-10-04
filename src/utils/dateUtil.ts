@@ -1,5 +1,7 @@
-export function  formatDate(expiryIso: string | null) {
-  if (!expiryIso) return "—";
+import { calendarDaysBetween, validDateISO } from "../shared/documents.js";
+
+export function formatDate(expiryIso: string | null) {
+  if (!validDateISO(expiryIso)) return "—";
   const dt = new Date(`${expiryIso}T00:00:00`);
   if (Number.isNaN(dt.getTime())) return expiryIso;
   return dt.toLocaleDateString("en-GB", {
@@ -11,15 +13,7 @@ export function  formatDate(expiryIso: string | null) {
 
 export function daysUntil(expiryIso?: string | null): number | null {
   if (!expiryIso) return null;
-  const exp = new Date(`${expiryIso}T00:00:00`);
-  if (Number.isNaN(exp.getTime())) return null;
-
   const today = new Date();
-  const start = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate()
-  );
-  const diffMs = exp.getTime() - start.getTime();
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return calendarDaysBetween(todayIso, expiryIso);
 }

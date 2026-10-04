@@ -33,6 +33,7 @@ export default function SavedVehiclesList({
         </span>
       </div>
 
+      <p className="mb-4 text-xs leading-5 text-slate-500">Saved reports show the result when you ran the check. They do not update automatically as policies expire.</p>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {vehicles.map((v) => (
           <li
@@ -60,6 +61,7 @@ export default function SavedVehiclesList({
               <p className="mt-1 text-xs text-slate-700">
                 Expiry: {formatDate(v.expiryIso ?? null)}
               </p>
+              <p className="mt-1 text-[11px] leading-4 text-slate-500">Reminders appear when you visit ClaimCheck. Add to your calendar for alerts outside the app.</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {[30, 15, 7, 1].map((n) => (
                   <label

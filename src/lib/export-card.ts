@@ -1,5 +1,4 @@
 import { toPng } from "html-to-image";
-import { jsPDF } from "jspdf";
 
 export async function elementToPngBlob(el: HTMLElement): Promise<Blob> {
   const dataUrl = await toPng(el, {
@@ -33,6 +32,7 @@ export async function downloadPdf(el: HTMLElement, filename: string) {
 }
 
 export async function elementToPdfBlob(el: HTMLElement): Promise<Blob> {
+  const { jsPDF } = await import("jspdf");
   const dataUrl = await toPng(el, {
     pixelRatio: 2,
     cacheBust: true,

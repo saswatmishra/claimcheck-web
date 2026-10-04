@@ -29,7 +29,7 @@ const POLICY_SECTIONS = [
     title: "What is stored",
     body: [
       "Uploaded document files are not stored as public document files by the normal analysis flow.",
-      "If you save a vehicle, the generated report and reminder settings are stored in your browser local storage. If you create a share link, ClaimCheck stores the generated report details, registration number, and nickname on the server until the link expires. The default share-link expiry is 90 days.",
+      "If you save a vehicle, the generated report and reminder settings are stored in your browser local storage. If you create a share link, ClaimCheck stores the generated report details, registration number, and nickname on the server. Links expire after 90 days by default. Expiring a link stops access but does not automatically delete the stored record.",
     ],
     icon: FiDatabase,
   },
