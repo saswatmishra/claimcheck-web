@@ -4,6 +4,7 @@ import multer from "multer";
 import cors from "cors";
 import { Database } from "./db.js";
 import { SharedReportsRepository } from "./shared-reports-repository.js";
+import { createApiAbuseGuards } from "./abuse-guards.js";
 import {
   extractDocumentFieldsAi,
   fieldValue,
@@ -36,6 +37,13 @@ import { pathToFileURL } from "node:url";
 export const app = express();
 const port = Number(process.env.PORT || 3001);
 const sharedReports = new SharedReportsRepository();
+const abuseGuards = createApiAbuseGuards();
+// Trust only a known number of proxy hops. Defaulting to 0 prevents forged client IPs.
+const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+if (!Number.isSafeInteger(trustedProxyHops) || trustedProxyHops < 0) {
+  throw new Error("TRUST_PROXY_HOPS must be a non-negative integer");
+}
+app.set("trust proxy", trustedProxyHops);
 const defaultAllowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -136,8 +144,9 @@ app.get("/db/healthz", async (_req, res) => {
 
 app.post(
   "/extract-policy-ai",
+  abuseGuards.extractAi,
   express.json({ limit: "12mb" }),
-  async (req, res) => {
+  abuseGuards.extractAi.handle(async (req, res) => {
     try {
       const {
         documentType = "policy",
@@ -166,10 +175,10 @@ app.post(
         error: "AI extraction failed",
       });
     }
-  },
+  }),
 );
 
-app.post("/shares", express.json({ limit: "1mb" }), async (req, res) => {
+app.post("/shares", abuseGuards.shares, express.json({ limit: "1mb" }), abuseGuards.shares.handle(async (req, res) => {
   try {
     const { report, regNumber = null, nickname = null } = req.body ?? {};
 
@@ -194,7 +203,7 @@ app.post("/shares", express.json({ limit: "1mb" }), async (req, res) => {
       error: "Unable to create share link",
     });
   }
-});
+}));
 
 app.get("/shares/:id", async (req, res) => {
   try {
@@ -215,12 +224,13 @@ app.get("/shares/:id", async (req, res) => {
 
 app.post(
   "/analyze",
+  abuseGuards.analyze,
   upload.fields([
     { name: "rc", maxCount: 1 },
     { name: "policy", maxCount: 1 },
     { name: "dl", maxCount: 1 }, // optional
   ]),
-  async (req, res) => {
+  abuseGuards.analyze.handle(async (req, res) => {
     try {
       const rcFile = req.files?.rc?.[0];
       const policyFile = req.files?.policy?.[0];
@@ -230,11 +240,16 @@ app.post(
       if (!rcFile || !policyFile) {
         return res.status(400).json({ error: "Missing rc or policy file" });
       }
-      const [rcText, policyText, dlText] = await Promise.all([
+      // A failed document does not cancel sibling OCR/PDF work. Keep the request's
+      // concurrency slot until every operation has settled, including on errors.
+      const textResults = await Promise.allSettled([
         fileToText(rcFile),
         fileToText(policyFile),
         dlFile ? fileToText(dlFile) : Promise.resolve(""),
       ]);
+      const failedText = textResults.find((result) => result.status === "rejected");
+      if (failedText) throw failedText.reason;
+      const [rcText, policyText, dlText] = textResults.map((result) => result.value);
 
       const rcTextOk = rcText && rcText.length > 10;
       const policyTextOk = policyText && policyText.length > 10;
@@ -711,7 +726,7 @@ app.post(
         error: "We couldn’t finish reading your documents. Please try again in a moment.",
       });
     }
-  },
+  }),
 );
 
 // Keep errors from upload middleware consistent with the JSON API.
