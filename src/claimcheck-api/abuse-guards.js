@@ -6,9 +6,10 @@ function positiveInteger(value, fallback) {
 
 export function createAbuseGuard({ maxRequests = 12, windowMs = 900000, maxConcurrent = 4, now = Date.now } = {}) {
   const requests = new Map();
+  const releases = new WeakMap();
   let active = 0;
   let lastSweep = 0;
-  return (req, res, next) => {
+  const guard = (req, res, next) => {
     const time = now();
     if (time - lastSweep >= windowMs) {
       for (const [ip, entry] of requests) if (entry.resetAt <= time) requests.delete(ip);
@@ -38,11 +39,37 @@ export function createAbuseGuard({ maxRequests = 12, windowMs = 900000, maxConcu
     }
     active += 1;
     let released = false;
-    const release = () => { if (!released) { released = true; active -= 1; } };
+    const release = () => {
+      if (released) return;
+      released = true;
+      active -= 1;
+      res.off("finish", release);
+      res.off("close", release);
+      releases.delete(res);
+    };
+    releases.set(res, release);
     res.once("finish", release);
     res.once("close", release);
     next();
   };
+
+  // Pair with the async route after its body parser. Until then, response events
+  // release failed/aborted uploads. Once work starts, only its completion releases
+  // capacity: closing the client connection does not cancel provider operations.
+  guard.handle = (handler) => async (req, res, next) => {
+    const release = releases.get(res);
+    if (!release) return;
+    res.off("finish", release);
+    res.off("close", release);
+    try {
+      if (!req.aborted && !res.destroyed) await handler(req, res, next);
+    } catch (error) {
+      next(error);
+    } finally {
+      release();
+    }
+  };
+  return guard;
 }
 
 export function createApiAbuseGuards(env = process.env) {

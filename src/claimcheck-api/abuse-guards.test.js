@@ -11,7 +11,7 @@ function call(middleware, ip = "203.0.113.10") {
   res.json = vi.fn((body) => { res.body = body; res.emit("finish"); return res; });
   const next = vi.fn();
   middleware(req, res, next);
-  return { res, next, headers };
+  return { req, res, next, headers };
 }
 
 describe("API abuse guards", () => {
@@ -58,8 +58,63 @@ describe("API abuse guards", () => {
     next.res.emit("finish");
   });
 
+  it("holds capacity until the handler settles even if it sends a response early", async () => {
+    const guard = createAbuseGuard({ maxRequests: 8, maxConcurrent: 1 });
+    const first = call(guard);
+    const work = Promise.withResolvers();
+    const handler = guard.handle(async (_req, res) => {
+      res.json({ ok: true });
+      await work.promise;
+    });
+    const running = handler(first.req, first.res, first.next);
+    expect(call(guard).res.statusCode).toBe(503);
+    work.resolve();
+    await running;
+    const restored = call(guard);
+    expect(restored.next).toHaveBeenCalledOnce();
+    restored.res.emit("finish");
+  });
+
+  it("releases capacity and forwards rejected handlers to Express", async () => {
+    const guard = createAbuseGuard({ maxConcurrent: 1 });
+    const first = call(guard);
+    const error = new Error("handler failed");
+    const next = vi.fn();
+    await guard.handle(async () => { throw error; })(first.req, first.res, next);
+    expect(next).toHaveBeenCalledExactlyOnceWith(error);
+    // Later response events must not release the slot a second time.
+    const restored = call(guard);
+    first.res.emit("close");
+    expect(call(guard).res.statusCode).toBe(503);
+    restored.res.emit("finish");
+  });
+
+  it("does not start work after a client disconnects during body parsing", async () => {
+    const guard = createAbuseGuard({ maxConcurrent: 1 });
+    const first = call(guard);
+    first.res.emit("close");
+    const handler = vi.fn();
+    await guard.handle(handler)(first.req, first.res, first.next);
+    expect(handler).not.toHaveBeenCalled();
+    const restored = call(guard);
+    expect(restored.next).toHaveBeenCalledOnce();
+    restored.res.emit("finish");
+  });
+
   it("handles invalid configuration using safe defaults", () => {
     const guards = createApiAbuseGuards({ API_RATE_ANALYZE_MAX: "-1", API_CONCURRENT_AI_MAX: "0" });
-    expect(Object.keys(guards).sort()).toEqual(["analyze", "extractAi", "shares"]);
+    for (let i = 0; i < 12; i += 1) {
+      const allowed = call(guards.analyze);
+      expect(allowed.next).toHaveBeenCalledOnce();
+      allowed.res.emit("finish");
+    }
+    expect(call(guards.analyze).res.statusCode).toBe(429);
+    const first = call(guards.extractAi);
+    const second = call(guards.extractAi);
+    expect(first.next).toHaveBeenCalledOnce();
+    expect(second.next).toHaveBeenCalledOnce();
+    expect(call(guards.extractAi).res.statusCode).toBe(503);
+    first.res.emit("finish");
+    second.res.emit("finish");
   });
 });
