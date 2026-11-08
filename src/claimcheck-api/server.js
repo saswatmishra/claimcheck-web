@@ -4,6 +4,7 @@ import multer from "multer";
 import cors from "cors";
 import { Database } from "./db.js";
 import { SharedReportsRepository } from "./shared-reports-repository.js";
+import { createApiAbuseGuards } from "./abuse-guards.js";
 import {
   extractDocumentFieldsAi,
   fieldValue,
@@ -36,6 +37,13 @@ import { pathToFileURL } from "node:url";
 export const app = express();
 const port = Number(process.env.PORT || 3001);
 const sharedReports = new SharedReportsRepository();
+const abuseGuards = createApiAbuseGuards();
+// Trust only a known number of proxy hops. Defaulting to 0 prevents forged client IPs.
+const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+if (!Number.isSafeInteger(trustedProxyHops) || trustedProxyHops < 0) {
+  throw new Error("TRUST_PROXY_HOPS must be a non-negative integer");
+}
+app.set("trust proxy", trustedProxyHops);
 const defaultAllowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -136,6 +144,7 @@ app.get("/db/healthz", async (_req, res) => {
 
 app.post(
   "/extract-policy-ai",
+  abuseGuards.extractAi,
   express.json({ limit: "12mb" }),
   async (req, res) => {
     try {
@@ -169,7 +178,7 @@ app.post(
   },
 );
 
-app.post("/shares", express.json({ limit: "1mb" }), async (req, res) => {
+app.post("/shares", abuseGuards.shares, express.json({ limit: "1mb" }), async (req, res) => {
   try {
     const { report, regNumber = null, nickname = null } = req.body ?? {};
 
@@ -215,6 +224,7 @@ app.get("/shares/:id", async (req, res) => {
 
 app.post(
   "/analyze",
+  abuseGuards.analyze,
   upload.fields([
     { name: "rc", maxCount: 1 },
     { name: "policy", maxCount: 1 },
