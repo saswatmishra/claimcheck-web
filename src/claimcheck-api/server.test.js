@@ -3,6 +3,10 @@ import { once } from "node:events";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { jsPDF } from "jspdf";
 
+// Integration fixtures intentionally exercise many requests from one loopback IP.
+// Rate-limiter enforcement is tested separately in abuse-guards.test.js.
+vi.hoisted(() => { process.env.API_RATE_ANALYZE_MAX = "100"; });
+
 // Tests must never load local credentials or contact document providers.
 vi.mock("./load-env.js", () => ({}));
 vi.mock("./ocr.js", () => ({ ocrBuffer: vi.fn(async (buffer) => buffer.subarray(8).toString()) }));
