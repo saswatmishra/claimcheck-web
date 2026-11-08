@@ -32,6 +32,8 @@ The frontend defaults to `http://localhost:5173`; the API defaults to port 3001.
 - `AI_EXTRACTION_ENABLED`: set to `false` to disable the optional AI fallback. Otherwise, fields that were not extracted may use `OPENAI_API_KEY` and `OPENAI_VISION_MODEL` (default `gpt-4o-mini`). No key means the fallback is skipped.
 - `DATABASE_URL`: PostgreSQL connection for share links. Apply `src/claimcheck-api/schema.sql` to the intended database. Analysis and browser-only saving do not require PostgreSQL.
 - `ALLOWED_ORIGINS`: comma-separated frontend origins for CORS.
+- `TRUST_PROXY_HOPS`: number of **known trusted reverse-proxy hops**, default 0. Avoid trusting user-supplied forwarded headers; configure only after verifying the host's proxy chain.
+- `API_RATE_WINDOW_MINUTES`, `API_RATE_{ANALYZE,AI,SHARES}_MAX`, and `API_CONCURRENT_{ANALYZE,AI,SHARES}_MAX`: per-process limits on expensive POST endpoints. Defaults are 15 minutes, 12/10/20 requests per IP, and 4/2/8 concurrent requests, respectively. 429 responses include Retry-After; overload returns 503. Deployments with multiple instances require shared/edge controls, plus provider spend alerts.
 - `SHARE_REPORT_TTL_DAYS`: share-link lifetime, default 90 days. Expiry blocks reads; schedule `SharedReportsRepository.deleteExpired()` separately to delete expired rows.
 
 Keep real keys and document files out of version control. Example environment files contain no usable credentials.
